@@ -263,6 +263,8 @@ _encode_thread = None
 _encode_stop = False
 
 _pressed_buttons = set()
+_pressed_keys = {}          # key name -> vk_code đang giữ (track modifier/key_down)
+_pressed_keys_lock = threading.Lock()
 _last_input_time = [0]
 _INPUT_TIMEOUT = 20
 
@@ -464,6 +466,8 @@ def _uinput_keydown(key):
     vk = _KEY_MAP.get(n)
     if vk is not None:
         _send_key(vk, True)
+        with _pressed_keys_lock:
+            _pressed_keys[n] = vk
         return True
     return False
 
@@ -473,8 +477,20 @@ def _uinput_keyup(key):
     vk = _KEY_MAP.get(n)
     if vk is not None:
         _send_key(vk, False)
+        with _pressed_keys_lock:
+            _pressed_keys.pop(n, None)
         return True
     return False
+
+
+def _release_all_keys():
+    """Nhả toàn bộ phím đang giữ (modifier/key_down) — gọi khi client disconnect
+    hoặc idle timeout để tránh kẹt Ctrl/Shift ở server."""
+    with _pressed_keys_lock:
+        held = dict(_pressed_keys)
+        _pressed_keys.clear()
+    for vk in held.values():
+        _send_key(vk, False)
 
 
 def _uinput_type(text):
@@ -2254,6 +2270,7 @@ async def ws_handler(websocket):
             _ip_to_ws.pop(client_ip, None)
         print(f"[WS] - {addr} (total: {len(connected_clients)})")
         _release_all_buttons()
+        _release_all_keys()
         _maybe_stop_streaming()
         # NEW [P_new]: Sau khi release client, kiểm tra còn ai không; nếu không → trả sleep về bình thường
         if not _has_any_client():
@@ -2447,6 +2464,9 @@ async def stream_loop():
         if _pressed_buttons and _last_input_time[0] > 0:
             if time.time() - _last_input_time[0] > _INPUT_TIMEOUT:
                 _release_all_buttons()
+        if _pressed_keys and _last_input_time[0] > 0:
+            if time.time() - _last_input_time[0] > _INPUT_TIMEOUT:
+                _release_all_keys()
 
         # Sleep until next send deadline (precise with timeBeginPeriod(1)).
         # Polling with a fixed 1ms sleep is inaccurate on Windows (~16ms resolution)
