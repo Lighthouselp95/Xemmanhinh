@@ -493,7 +493,7 @@ function initDecoder(width, height) {
       bwayPlayer = new Player({ useWorker: true, sliceMode: true, sliceNum: 0, size: { width, height } });
       canvas = bwayPlayer.canvas;
       canvas.style.backgroundColor = '#0a0a1a';
-      canvas.style.cursor = 'crosshair';
+      canvas.style.cursor = 'default';
       container.querySelector('#video-wrapper').appendChild(canvas);
       ctx2d = null;
       bwayPlayer.onPictureDecoded = function(buffer, width, height, infos) {
@@ -543,7 +543,7 @@ function renderFrame(w, h, drawFn) {
       if (!canvas) {
         canvas = document.createElement('canvas');
         canvas.style.backgroundColor = '#0a0a1a';
-        canvas.style.cursor = controlEnabled ? 'crosshair' : 'default';
+        canvas.style.cursor = 'default';
         container.querySelector('#video-wrapper').appendChild(canvas);
       }
       ctx2d = canvas.getContext('2d', { desynchronized: true });
@@ -1923,7 +1923,7 @@ btnCtrl.addEventListener('click', () => {
   controlEnabled = !controlEnabled;
   btnCtrl.textContent = controlEnabled ? 'Control: ON' : 'Control: OFF';
   btnCtrl.classList.toggle('active', controlEnabled);
-  if (canvas) canvas.style.cursor = controlEnabled ? 'crosshair' : 'default';
+  if (canvas) canvas.style.cursor = 'default';
 });
 btnFullscreen.addEventListener('click', () => {
   if (document.fullscreenElement) document.exitFullscreen();
