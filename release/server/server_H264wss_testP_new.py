@@ -419,6 +419,9 @@ def _send_key(vk_code, down=True):
     _vk_key_event(vk_code, down)
 
 
+_MODIFIER_SET = {'shift', 'ctrl', 'control', 'alt', 'super', 'meta', 'win'}
+
+
 def _uinput_key(key):
     n = (key or '').lower()
     vk = _KEY_MAP.get(n)
@@ -427,8 +430,8 @@ def _uinput_key(key):
         time.sleep(0.01)
         _send_key(vk, False)
         return True
-    if len(key) == 1:
-        code = _CHAR_TO_VK.get(key)
+    if len(n) == 1:
+        code = _CHAR_TO_VK.get(n)
         if code is not None:
             shift = key.isupper() and key.isalpha()
             if shift:
@@ -438,6 +441,20 @@ def _uinput_key(key):
             _vk_key_event(code, False)
             if shift:
                 _send_key(VK_SHIFT, False)
+            return True
+    return False
+
+
+def _uinput_char_held(key):
+    # Gõ ký tự KHI modifier (vd Shift/Ctrl) đã được giữ ở server —
+    # KHÔNG tự gửi thêm modifier (tránh lặp Shift hoặc thả sớm).
+    n = (key or '').lower()
+    if len(n) == 1:
+        code = _CHAR_TO_VK.get(n)
+        if code is not None:
+            _vk_key_event(code, True)
+            time.sleep(0.005)
+            _vk_key_event(code, False)
             return True
     return False
 
@@ -514,10 +531,21 @@ def execute_command(cmd_type, data):
             key = data.get("key", "")
             if '+' in key:
                 parts = key.split('+')
-                for p in parts:
-                    _uinput_keydown(p)
-                for p in reversed(parts):
-                    _uinput_keyup(p)
+                has_mod = any(p.lower() in _MODIFIER_SET for p in parts)
+                non_mod = [p for p in parts if p.lower() not in _MODIFIER_SET]
+                if has_mod:
+                    # Giữ modifier (vd shift+ctrl+alt) rồi gõ ký tự/khóa cuối
+                    mod_keys = [p for p in parts if p.lower() in _MODIFIER_SET]
+                    for m in mod_keys:
+                        _uinput_keydown(m)
+                    for ch in non_mod:
+                        if ch:
+                            _uinput_char_held(ch) if not _KEY_MAP.get(ch.lower(), None) else _uinput_key(ch)
+                    for m in reversed(mod_keys):
+                        _uinput_keyup(m)
+                else:
+                    for p in parts:
+                        _uinput_key(p)
             else:
                 _uinput_key(key)
         elif cmd_type == "key_type":
