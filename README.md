@@ -60,7 +60,7 @@ pip install pyinstaller websockets aiortc av numpy pillow
 ```bash
 # Build P_new server
 cd release/server
-pyinstaller --onefile --name server_H264wss_testP_new server_H264wss_testP_new.py
+pyinstaller --onefile server_H264wss_testP_new.py
 
 # Build P_new manager
 cd ../../server
