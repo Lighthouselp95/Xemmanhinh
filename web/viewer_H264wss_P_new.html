@@ -719,6 +719,7 @@ function setupCanvasEvents() {
   canvas.addEventListener('mousedown', (e) => {
     if (!controlEnabled) return;
     e.preventDefault();
+    _lastMouseDownTs = Date.now();
     const { x, y } = toServerCoords(e.clientX, e.clientY);
     const btn = e.button === 2 ? 3 : e.button === 1 ? 2 : 1;
     sendMsg({ type: 'mouse_down', x, y, button: btn });
@@ -732,6 +733,7 @@ function setupCanvasEvents() {
   });
   canvas.addEventListener('click', (e) => {
     if (!controlEnabled) return;
+    if (Date.now() - _lastMouseDownTs < 150) return;
     e.preventDefault();
     const { x, y } = toServerCoords(e.clientX, e.clientY);
     const btn = e.button === 2 ? 3 : e.button === 1 ? 2 : 1;
@@ -1523,7 +1525,8 @@ function applyZoom() {
 let longPressTimer = null;
 let longPressFired = false;
 let doubleTapSelecting = false; // true = vừa double-tap, sẵn sàng kéo để bôi đen
-let _mouseHeld = false;          // true = nút chuột trái đang bị giữ (sau double-tap hold) → tap tiếp theo = mouse_up
+let _mouseHeld = false;
+let _lastMouseDownTs = 0;          // true = nút chuột trái đang bị giữ (sau double-tap hold) → tap tiếp theo = mouse_up
 let _dtReleaseTimeout = null; // timeout chờ release nhanh sau 2nd tap (double-click completion)
 const DT_RELEASE_MS = 250; // ms: release trong khoảng này → double-click; giữ lâu → timeout
 const SINGLE_TAP_DELAY_MS = 250; // ms: trễ gửi click đơn, chờ xem có tap 2 không (giảm từ 500 để tap nhạy hơn)
@@ -1725,7 +1728,7 @@ function onTouchMove(e) {
         const dist = Math.sqrt(sdx*sdx + sdy*sdy);
         // Vào scroll mode khi finger di chuyển >5px → KHÔNG gửi click nữa
         // Nếu đang giữ mousedown (_mouseHeld) → KHÔNG vào scroll, vẫn là kéo (mouse_move)
-         const justEnteredScroll = !scrollMode && !_mouseHeld && dist > 2;
+         const justEnteredScroll = !scrollMode && !_mouseHeld && dist > 10;
         if (justEnteredScroll) {
           scrollMode = true;
           // Đặt con trỏ chuột về vị trí BẮT ĐẦU đặt tay (touchStartPos) — không theo finger đang di chuyển
@@ -1883,15 +1886,13 @@ function onTouchEnd(e) {
       }
       doubleTapSelecting = false;
     } else if (_mouseHeld) {
-      // Đang giữ chuột (double-tap hold đã timeout) → CHỈ nhả khi là TAP SẠCH (isTap).
-      // Nếu là scroll/drag (di chuyển nhiều hoặc giữ lâu) → GIỮ mousedown, không thoát.
-      if (isTap) {
-        // Tap sạch tại vị trí mới = click đơn: mouse_move + mouse_up
-        const { x, y } = toServerCoords(t.clientX, t.clientY);
-        sendMsg({ type: 'mouse_move', x, y });
-        sendMsg({ type: 'mouse_up', x, y, button: 1 });
-        _mouseHeld = false;
-      }
+      // Fix: luôn nhả khi nhấc tay (tránh kẹt nút gây treo), kể cả kéo dài
+      const { x, y } = toServerCoords(t.clientX, t.clientY);
+      sendMsg({ type: 'mouse_move', x, y });
+      sendMsg({ type: 'mouse_up', x, y, button: 1 });
+      _mouseHeld = false;
+      if (_dtReleaseTimeout) { clearTimeout(_dtReleaseTimeout); _dtReleaseTimeout = null; }
+      doubleTapSelecting = false;
     } else if (isTap) {
       // Single tap: KHÔNG gửi ngay — trễ SINGLE_TAP_DELAY_MS chờ xem có tap 2 không.
       // Nếu có tap 2 → onTouchStart hủy timer này (không gửi click đơn, thành double-tap).
