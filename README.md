@@ -12,8 +12,7 @@ Remote desktop viewer using H264 encoding + WebSocket transport, viewable direct
 ## Quick Start (Pre-built)
 
 1. Run `server_manager_P_new.exe` (auto-detects and spawns server)
-2. Open browser: `https://localhost:8765`
-3. Open `web/viewer_H264wss_P_new.html` as viewer
+2. Open browser: `http://localhost:8765`
 
 ## Installation (From Source)
 
@@ -43,7 +42,7 @@ openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -node
 python server/server_manager.py
 ```
 
-Then open `web/viewer_H264wss_P_new.html` in browser.
+Open `http://localhost:8765` in browser.
 
 ## Build EXE
 
@@ -51,30 +50,24 @@ Then open `web/viewer_H264wss_P_new.html` in browser.
 
 ```bash
 cd release/server
-pyinstaller --onefile server_H264wss_testP_new.py
+pyinstaller --onefile --name server_H264wss_testP_new server_H264wss_testP_new.py
 ```
 
 ### Build Manager
 
 ```bash
 cd server
-pyinstaller --onefile server_manager.py
+pyinstaller --onefile --name server_manager_P_new server_manager.py
 ```
 
 Output: `dist/` folder in each directory.
-
-**Note:** The manager auto-detects which server to spawn based on its exe name:
-- `server_manager_P_new.exe` spawns `server_H264wss_testP_new.exe`
-- `server_manager.exe` spawns `server_H264wss.exe` (base)
 
 ## Source Files
 
 | File | Size | Description |
 |------|------|-------------|
 | `server/server_manager.py` | 14KB | Process manager (detects version, spawns server) |
-| `server/server_H264wss.py` | 71KB | Base server source |
 | `release/server/server_H264wss_testP_new.py` | 108KB | P_new server source (used for exe build) |
-| `web/viewer_H264wss_P_new.html` | 94KB | P_new viewer |
 
 ## Pre-built Releases
 
@@ -88,11 +81,8 @@ GitHub Release includes:
 Xemmanhinh/
   server/
     server_manager.py              Process manager
-    server_H264wss.py              Base server source
   web/
-    viewer_H264wss_P_new.html     P_new viewer (main)
-    viewer_H264wss_P_wgl.html     P_new viewer (WebGL)
-    viewer_H264wss_O_new.html     O_new viewer
+    viewer_H264wss_P_new.html     P_new viewer
     broadway-*.js                  H264 decoder
   tools/
     virtual_display_driver/        Virtual display driver
