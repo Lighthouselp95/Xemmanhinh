@@ -22,6 +22,15 @@ Remote desktop viewer using H264 encoding + WebSocket transport, viewable direct
 pip install websockets av dxcam numpy opencv-python
 ```
 
+### Install OpenSSL (for SSL certificate)
+
+Windows: OpenSSL included with Git for Windows (`C:\Program Files\Git\usr\bin\openssl.exe`). Or install via:
+
+```bash
+scoop install openssl
+# or download from https://slproweb.com/products/Win32OpenSSL.html
+```
+
 ### Generate SSL Certificate
 
 ```bash
