@@ -19,7 +19,7 @@ Remote desktop viewer using H264 encoding + WebSocket transport, viewable direct
 ### Install Dependencies
 
 ```bash
-pip install websockets av dxcam numpy opencv-python
+pip install websockets av dxcam numpy opencv-python soundcard
 ```
 
 ### Install OpenSSL (for SSL certificate)
@@ -61,7 +61,7 @@ Cai_Dat_Man_Hinh_Ao.bat
 ### Prerequisites
 
 ```bash
-pip install pyinstaller websockets av dxcam numpy opencv-python
+pip install pyinstaller websockets av dxcam numpy opencv-python soundcard
 ```
 
 ### Build All
@@ -71,8 +71,8 @@ pip install pyinstaller websockets av dxcam numpy opencv-python
 cd release/server
 openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
 
-# Build P_new server (bundle web viewer + cert)
-pyinstaller --onefile --add-data "../../web;web" --add-data "cert.pem;." --add-data "key.pem;." server_H264wss_testP_new.py
+# Build P_new server (bundle web viewer + cert + audio)
+pyinstaller --onefile --hidden-import soundcard --collect-all soundcard --hidden-import comtypes --add-data "../../web;web" --add-data "cert.pem;." --add-data "key.pem;." server_H264wss_testP_new.py
 
 # Build P_new manager
 cd ../../server
@@ -81,10 +81,10 @@ pyinstaller --onefile --name server_manager_P_new server_manager.py
 
 ### Output
 
-- `release/server/dist/server_H264wss_testP_new.exe` - Main server (~95MB, includes web + cert)
+- `release/server/dist/server_H264wss_testP_new.exe` - Main server (~90MB, includes web + cert + audio)
 - `server/dist/server_manager_P_new.exe` - Process manager (~9MB)
 
-Copy both exe to same folder, run `server_manager_P_new.exe` to start. Mock tested at `C:\Temp\mock_Xemmanhinh\dist_test` → `94.5 MB` and `[FPS]` log OK.
+Copy both exe to same folder, run `server_manager_P_new.exe` (Admin) to start. Mock tested at `C:\Temp\mock_Xemmanhinh\dist_test` → `90.55 MB` and `[FPS]` log OK, audio WASAPI loopback works on all machines.
 
 ## Project Structure
 
