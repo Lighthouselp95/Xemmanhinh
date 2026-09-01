@@ -27,6 +27,9 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from typing import Set
 from fractions import Fraction
 
+import warnings
+warnings.filterwarnings("ignore", message="data discontinuity.*")
+warnings.filterwarnings("ignore", category=UserWarning, module="soundcard")
 import websockets
 import av
 from av.video.frame import PictureType
