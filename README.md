@@ -14,6 +14,39 @@ Remote desktop viewer using H264 encoding + WebSocket transport, viewable direct
 1. Run `server_manager_P_new.exe`
 2. Open browser: `http://localhost:8765`
 
+## Run from Source
+
+### Install Dependencies
+
+```bash
+pip install websockets aiortc av numpy pillow
+```
+
+### Generate SSL Certificate
+
+```bash
+cd server
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
+```
+
+### Start Server
+
+```bash
+python server/server_manager.py
+```
+
+Open `http://localhost:8765` in browser.
+
+### Virtual Display (Optional)
+
+If no physical display available, install virtual display driver:
+
+```bash
+cd tools/virtual_display_driver
+# Run as Administrator
+Cai_Dat_Man_Hinh_Ao.bat
+```
+
 ## Build EXE
 
 ### Prerequisites
