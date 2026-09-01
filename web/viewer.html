@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0">
+<title>Screen Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a2e;
+  overflow: hidden;
+  touch-action: manipulation;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #fff;
+  overscroll-behavior: none;
+}
+#zoom-container {
+  position: fixed; inset: 0; transform-origin: center center;
+  overflow: hidden;
+}
+#screen-canvas {
+  display: block;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  image-rendering: auto;
+  touch-action: none;
+}
+#status-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+  padding: 8px 16px; display: flex; align-items: center; gap: 12px;
+  font-size: 13px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+#status-bar.visible { opacity: 1; pointer-events: auto; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.connected { background: #00e676; box-shadow: 0 0 6px #00e676; }
+.status-dot.disconnected { background: #ff5252; box-shadow: 0 0 6px #ff5252; }
+.status-dot.connecting { background: #ffc107; box-shadow: 0 0 6px #ffc107; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: 0.4; } }
+#fps-counter { margin-left: auto; color: #aaa; font-variant-numeric: tabular-nums; }
+#toolbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+  padding: 10px 16px; display: flex; align-items: center; justify-content: center; gap: 12px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  transform: translateY(100%);
+}
+#toolbar.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.toolbar-btn {
+  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
+  color: #fff; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; transition: all 0.2s; white-space: nowrap;
+}
+.toolbar-btn:hover { background: rgba(255,255,255,0.25); }
+.toolbar-btn.active { background: #00e676; color: #000; border-color: #00e676; }
+#arrow-toggle {
+  position: fixed; bottom: 12px; right: 12px;
+  z-index: 101; border: none; border-radius: 0;
+  padding: 8px 10px; font-size: 18px; cursor: pointer;
+  transition: opacity 0.3s ease;
+  color: rgba(255,255,255,0.4);
+  background: none;
+  pointer-events: auto;
+}
+#arrow-toggle:hover { color: rgba(255,255,255,0.85); }
+#arrow-toggle.open { transform: rotate(180deg); }
+#control-panel {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
+  padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 12px;
+  transform: translateY(100%); transition: transform 0.3s ease;
+  pointer-events: none;
+}
+#control-panel.show { transform: translateY(0); pointer-events: auto; }
+#settings-panel {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #16213e; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px; padding: 24px; z-index: 200; min-width: 300px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: none;
+}
+#settings-panel.show { display: block; }
+#settings-panel h3 { margin-bottom: 16px; font-size: 16px; }
+.setting-row { margin-bottom: 12px; }
+.setting-row label { display: block; font-size: 12px; color: #aaa; margin-bottom: 4px; }
+.setting-row input {
+  width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+  color: #fff; font-size: 14px; outline: none;
+}
+.setting-row input:focus { border-color: #00e676; }
+.settings-actions { display: flex; gap: 8px; margin-top: 16px; }
+#keyboard-panel {
+  display:none; position:fixed; bottom:60px; left:0; right:0; z-index:150;
+  background:rgba(0,0,0,0.85); padding:12px; max-height:40vh; overflow-y:auto;
+}
+#keyboard-panel.show { display:block; }
+.key-grid { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+</style>
+</head>
+<body>
+
+<div id="status-bar">
+  <div class="status-dot connecting" id="status-dot"></div>
+  <span id="status-text">Connecting...</span>
+  <span id="audio-indicator" style="font-size:11px;color:#888;margin-left:8px;"></span>
+  <span id="fps-counter">0 FPS</span>
+</div>
+
+<div id="zoom-container">
+  <canvas id="screen-canvas"></canvas>
+</div>
+
+<button id="arrow-toggle">&#9650;</button>
+
+<div id="control-panel">
+  <button class="toolbar-btn" id="btn-ctrl">Control: OFF</button>
+  <button class="toolbar-btn" id="btn-fullscreen">Fullscreen</button>
+  <button class="toolbar-btn" id="btn-keyboard">Keyboard</button>
+  <button class="toolbar-btn" id="btn-settings">Settings</button>
+</div>
+
+<div id="settings-panel">
+  <h3>Settings</h3>
+  <div class="setting-row">
+    <label>Server IP</label>
+    <input id="inp-host" type="text" placeholder="ws://192.168.x.x:8766">
+  </div>
+  <div class="settings-actions">
+    <button class="toolbar-btn" id="btn-save-settings">Save & Reconnect</button>
+    <button class="toolbar-btn" id="btn-close-settings">Close</button>
+  </div>
+</div>
+
+<div id="keyboard-panel">
+  <div class="key-grid">
+    <button class="toolbar-btn key-btn" data-key="Escape">Esc</button>
+    <button class="toolbar-btn key-btn" data-key="Tab">Tab</button>
+    <button class="toolbar-btn key-btn" data-key="BackSpace">Bksp</button>
+    <button class="toolbar-btn key-btn" data-key="Return">Enter</button>
+    <button class="toolbar-btn key-btn" data-key="space">Space</button>
+    <button class="toolbar-btn key-btn" data-key="Delete">Del</button>
+    <button class="toolbar-btn key-btn" data-key="Up">Up</button>
+    <button class="toolbar-btn key-btn" data-key="Down">Down</button>
+    <button class="toolbar-btn key-btn" data-key="Left">Left</button>
+    <button class="toolbar-btn key-btn" data-key="Right">Right</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl">Ctrl</button>
+    <button class="toolbar-btn key-btn" data-key="alt">Alt</button>
+    <button class="toolbar-btn key-btn" data-key="shift">Shift</button>
+    <button class="toolbar-btn key-btn" data-key="super">Super</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+a">Ctrl+A</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+c">Ctrl+C</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+v">Ctrl+V</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+z">Ctrl+Z</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+s">Ctrl+S</button>
+    <button class="toolbar-btn key-btn" data-key="alt+Tab">Alt+Tab</button>
+    <button class="toolbar-btn key-btn" data-key="alt+F4">Alt+F4</button>
+    <button class="toolbar-btn key-btn" data-key="F5">F5</button>
+    <button class="toolbar-btn key-btn" data-key="F11">F11</button>
+  </div>
+  <div style="margin-top:10px; text-align:center;">
+    <input id="type-input" type="text" placeholder="Type text + Enter..."
+      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+      style="width:80%; max-width:400px; padding:8px 12px; background:rgba(255,255,255,0.1);
+      border:1px solid rgba(255,255,255,0.2); border-radius:8px; color:#fff; font-size:14px; outline:none;">
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('screen-canvas');
+const ctx = canvas.getContext('2d');
+const statusDot = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+const fpsCounter = document.getElementById('fps-counter');
+const statusBar = document.getElementById('status-bar');
+const arrowToggle = document.getElementById('arrow-toggle');
+const controlPanel = document.getElementById('control-panel');
+const btnCtrl = document.getElementById('btn-ctrl');
+const btnFullscreen = document.getElementById('btn-fullscreen');
+const btnSettings = document.getElementById('btn-settings');
+const btnKeyboard = document.getElementById('btn-keyboard');
+const settingsPanel = document.getElementById('settings-panel');
+const keyboardPanel = document.getElementById('keyboard-panel');
+const typeInput = document.getElementById('type-input');
+
+
+let controlEnabled = true;
+btnCtrl.textContent = 'Control: ON';
+btnCtrl.classList.add('active');
+canvas.style.cursor = 'crosshair';
+let screenInfo = { width: 1920, height: 1080, scale: 100 };
+let frameCount = 0;
+let lastFpsTime = Date.now();
+let serverUrl = '';
+let currentZoom = 1;
+let lastCanvasW = 0, lastCanvasH = 0;
+
+// ── Audio: PCM raw via ScriptProcessorNode ──
+let audioCtx = null;
+let audioPkts = 0;
+let audioBytes = 0;
+let audioBuf = [];
+let bufOffset = 0;
+let audioNode = null;
+let audioStarted = false;
+const SPN_SIZE = 4096;
+const PREBUFFER = 1;
+const audioIndicator = document.getElementById('audio-indicator');
+
+function initAudio() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+  if (audioCtx.state === 'suspended') resumeAudio();
+  audioNode = audioCtx.createScriptProcessor(SPN_SIZE, 0, 2);
+  audioNode.onaudioprocess = (e) => {
+    const outL = e.outputBuffer.getChannelData(0);
+    const outR = e.outputBuffer.getChannelData(1);
+    for (let i = 0; i < SPN_SIZE; i++) {
+      while (audioBuf.length > 0 && bufOffset + 2 > audioBuf[0].length) {
+        audioBuf.shift();
+        bufOffset = 0;
+      }
+      if (audioBuf.length > 0 && audioStarted) {
+        outL[i] = audioBuf[0][bufOffset];
+        outR[i] = audioBuf[0][bufOffset + 1];
+        bufOffset += 2;
+      } else {
+        outL[i] = 0;
+        outR[i] = 0;
+      }
+    }
+  };
+  audioNode.connect(audioCtx.destination);
+  console.log('[AUDIO] ScriptProcessor ready, SPN_SIZE=' + SPN_SIZE);
+  audioIndicator.textContent = 'audio:ok';
+}
+
+function playPCMChunk(raw) {
+  audioPkts++;
+  audioBytes += raw.length;
+  audioIndicator.textContent = 'audio:' + audioPkts;
+  const samples = new Int16Array(raw.buffer, raw.byteOffset, raw.length / 2);
+  if (samples.length === 0) return;
+  const pcm = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) pcm[i] = samples[i] / 32768;
+  audioBuf.push(pcm);
+  if (!audioStarted && audioBuf.length >= PREBUFFER) {
+    audioStarted = true;
+    console.log('[AUDIO] Playback started after', PREBUFFER, 'chunks');
+  }
+}
+
+// Resume AudioContext on user gesture (keep alive, not once)
+function resumeAudio() {
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().then(() => console.log('[AUDIO] Context resumed'));
+  }
+}
+document.addEventListener('click', resumeAudio);
+document.addEventListener('touchstart', resumeAudio);
+const zoomContainer = document.getElementById('zoom-container');
+
+// ── Resize canvas display to fit viewport, keep aspect ratio ──
+function fitCanvas() {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const cw = canvas.width || 1920;
+  const ch = canvas.height || 1080;
+  const canvasAspect = cw / ch;
+  const screenAspect = vw / vh;
+  let dw, dh;
+  if (canvasAspect > screenAspect) {
+    dw = vw;
+    dh = vw / canvasAspect;
+  } else {
+    dh = vh;
+    dw = vh * canvasAspect;
+  }
+  canvas.style.width = dw + 'px';
+  canvas.style.height = dh + 'px';
+}
+
+window.addEventListener('resize', fitCanvas);
+
+// ── Cursor overlay (canvas pixel coords) ──────────────────────
+let remoteCursor = { px: 960, py: 540, visible: false };
+
+function drawCursorOverlay() {
+  if (!remoteCursor.visible) return;
+  const cx = remoteCursor.px;
+  const cy = remoteCursor.py;
+  const s = 1.5;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx, cy + 16 * s);
+  ctx.lineTo(cx + 5 * s, cy + 12 * s);
+  ctx.lineTo(cx + 10 * s, cy + 18 * s);
+  ctx.lineTo(cx + 13 * s, cy + 16 * s);
+  ctx.lineTo(cx + 8 * s, cy + 10 * s);
+  ctx.lineTo(cx + 14 * s, cy + 10 * s);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── Autohide toolbar ──────────────────────────────────────────
+let hideTimer = null;
+
+function showUI() {
+  statusBar.classList.add('visible');
+  arrowToggle.style.opacity = '1';
+  arrowToggle.style.pointerEvents = 'auto';
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(hideUI, 3000);
+}
+
+function hideUI() {
+  if (settingsPanel.classList.contains('show')) return;
+  statusBar.classList.remove('visible');
+  controlPanel.classList.remove('show');
+  arrowToggle.classList.remove('open');
+  if (!document.fullscreenElement) {
+    arrowToggle.style.opacity = '0';
+    arrowToggle.style.pointerEvents = 'none';
+  }
+}
+
+document.addEventListener('mousemove', (e) => {
+  if (e.clientY > window.innerHeight * 0.85) showUI();
+});
+
+statusBar.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+statusBar.addEventListener('mouseleave', () => { hideTimer = setTimeout(hideUI, 1500); });
+
+arrowToggle.addEventListener('click', () => {
+  const isOpen = controlPanel.classList.toggle('show');
+  arrowToggle.classList.toggle('open', isOpen);
+  clearTimeout(hideTimer);
+  if (!isOpen) hideTimer = setTimeout(hideUI, 3000);
+});
+
+controlPanel.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+controlPanel.addEventListener('mouseleave', () => { hideTimer = setTimeout(hideUI, 1500); });
+
+showUI();
+
+// ── WebSocket ─────────────────────────────────────────────────
+let ws = null;
+let audioWs = null;
+
+function getServerUrl() {
+  return localStorage.getItem('server_url') || `ws://${window.location.hostname}:8766`;
+}
+
+function getAudioUrl() {
+  const base = localStorage.getItem('server_url') || `ws://${window.location.hostname}:8766`;
+  return base.replace(/:(\d+)$/, ':8767');
+}
+
+function setStatus(state, text) {
+  statusDot.className = 'status-dot ' + state;
+  statusText.textContent = text;
+}
+
+function connectAudio() {
+  if (audioWs && audioWs.readyState <= 1) audioWs.close();
+  audioWs = new WebSocket(getAudioUrl());
+  audioWs.binaryType = 'arraybuffer';
+  audioWs.onopen = () => console.log('[AUDIO-WS] Connected');
+  audioWs.onmessage = (evt) => {
+    if (evt.data instanceof ArrayBuffer) {
+      const data = new Uint8Array(evt.data);
+      if (data[0] === 0x02) playPCMChunk(data.slice(1));
+    }
+  };
+  audioWs.onclose = () => { setTimeout(connectAudio, 2000); };
+  audioWs.onerror = () => {};
+}
+
+function connect() {
+  if (ws && ws.readyState <= 1) ws.close();
+  serverUrl = getServerUrl();
+  setStatus('connecting', 'Connecting...');
+  ws = new WebSocket(serverUrl);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    setStatus('connected', 'Connected');
+    initAudio();
+    connectAudio();
+    ws.send(JSON.stringify({ type: 'get_screen_info' }));
+    showUI();
+  };
+
+  ws.onmessage = (evt) => {
+    if (evt.data instanceof ArrayBuffer) {
+      const data = new Uint8Array(evt.data);
+      const type = data[0];
+      const payload = data.slice(1);
+
+      if (type === 0x01) {
+        const blob = new Blob([payload], { type: 'image/jpeg' });
+        if (window.createImageBitmap) {
+          createImageBitmap(blob).then(img => {
+            if (img.width !== lastCanvasW || img.height !== lastCanvasH) {
+              currentZoom = 1;
+              panX = 0;
+              panY = 0;
+              applyZoom();
+              lastCanvasW = img.width;
+              lastCanvasH = img.height;
+            }
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            drawCursorOverlay();
+            fitCanvas();
+            frameCount++;
+            img.close();
+          }).catch(e => console.error('ImageBitmap error:', e));
+        } else {
+          const url = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            if (img.width !== lastCanvasW || img.height !== lastCanvasH) {
+              currentZoom = 1;
+              panX = 0;
+              panY = 0;
+              applyZoom();
+              lastCanvasW = img.width;
+              lastCanvasH = img.height;
+            }
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            drawCursorOverlay();
+            fitCanvas();
+            frameCount++;
+            URL.revokeObjectURL(url);
+          };
+          img.onerror = (e) => console.error('Image fallback error:', e);
+          img.src = url;
+        }
+      }
+      return;
+    }
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'screen_info') {
+        screenInfo = msg;
+      }
+    } catch (e) {}
+  };
+
+  ws.onclose = () => {
+    setStatus('disconnected', 'Disconnected - Reconnecting...');
+    showUI();
+    setTimeout(connect, 2000);
+  };
+  ws.onerror = () => setStatus('disconnected', 'Error');
+}
+
+setInterval(() => {
+  const elapsed = (Date.now() - lastFpsTime) / 1000;
+  fpsCounter.textContent = Math.round(frameCount / elapsed) + ' FPS';
+  frameCount = 0;
+  lastFpsTime = Date.now();
+}, 1000);
+
+// ── Coordinate mapping ────────────────────────────────────────
+function toServerCoords(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const px = ((clientX - rect.left) / rect.width) * canvas.width;
+  const py = ((clientY - rect.top) / rect.height) * canvas.height;
+  const factor = screenInfo.scale / 100;
+  return {
+    px: Math.round(Math.max(0, Math.min(canvas.width, px))),
+    py: Math.round(Math.max(0, Math.min(canvas.height, py))),
+    x: Math.round(Math.max(0, Math.min(canvas.width, px)) / factor),
+    y: Math.round(Math.max(0, Math.min(canvas.height, py)) / factor),
+  };
+}
+
+function sendMsg(data) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(data));
+}
+
+// ── Throttled mouse move ──────────────────────────────────────
+let lastMoveSent = 0;
+let pendingMove = null;
+const MOVE_INTERVAL = 33;
+
+function sendMouseMove(px, py, x, y) {
+  remoteCursor = { px, py, visible: true };
+  const now = Date.now();
+  if (now - lastMoveSent >= MOVE_INTERVAL) {
+    lastMoveSent = now;
+    sendMsg({ type: 'mouse_move', x, y });
+    pendingMove = null;
+  } else {
+    pendingMove = { type: 'mouse_move', x, y };
+  }
+}
+
+setInterval(() => {
+  if (pendingMove) {
+    lastMoveSent = Date.now();
+    sendMsg(pendingMove);
+    pendingMove = null;
+  }
+}, 16);
+
+// ── Mouse events ──────────────────────────────────────────────
+canvas.addEventListener('mousedown', (e) => {
+  if (!controlEnabled) return;
+  e.preventDefault();
+  const { x, y } = toServerCoords(e.clientX, e.clientY);
+  const btn = e.button === 2 ? 3 : e.button === 1 ? 2 : 1;
+  sendMsg({ type: 'mouse_down', x, y, button: btn });
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if (!controlEnabled) return;
+  e.preventDefault();
+  const { x, y } = toServerCoords(e.clientX, e.clientY);
+  const btn = e.button === 2 ? 3 : e.button === 1 ? 2 : 1;
+  sendMsg({ type: 'mouse_up', x, y, button: btn });
+});
+
+canvas.addEventListener('click', (e) => {
+  if (!controlEnabled) return;
+  e.preventDefault();
+  const { x, y } = toServerCoords(e.clientX, e.clientY);
+  const btn = e.button === 2 ? 3 : e.button === 1 ? 2 : 1;
+  sendMsg({ type: 'mouse_click', x, y, button: btn });
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!controlEnabled) return;
+  const { px, py, x, y } = toServerCoords(e.clientX, e.clientY);
+  sendMouseMove(px, py, x, y);
+});
+
+canvas.addEventListener('wheel', (e) => {
+  if (!controlEnabled) return;
+  e.preventDefault();
+  sendMsg({ type: 'mouse_scroll', dy: e.deltaY > 0 ? -3 : 3 });
+}, { passive: false });
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ── Touch: drag=scroll, tap=click, 2fingers=zoom+pan ─────────
+let touchStartPos = null;
+let touchStartTime = 0;
+let touchLastY = null;
+let twoFingerActive = false;
+let twoFingerLastDist = null;
+let twoFingerLastMid = null;
+let panX = 0, panY = 0;
+
+function applyZoom() {
+  zoomContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 2) {
+    twoFingerActive = true;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    twoFingerLastDist = Math.sqrt(dx * dx + dy * dy);
+    twoFingerLastMid = {
+      x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+    };
+    return;
+  }
+  if (twoFingerActive) return;
+  if (!controlEnabled) return;
+  const t = e.touches[0];
+  touchStartPos = { x: t.clientX, y: t.clientY };
+  touchStartTime = Date.now();
+  touchLastY = t.clientY;
+  const { px, py, x, y } = toServerCoords(t.clientX, t.clientY);
+  sendMouseMove(px, py, x, y);
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 2 || twoFingerActive) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+    if (twoFingerLastDist !== null && twoFingerLastMid !== null) {
+      const distRatio = dist / twoFingerLastDist;
+      // 1) Pan: kéo theo điểm giữa hai ngón
+      panX += midX - twoFingerLastMid.x;
+      panY += midY - twoFingerLastMid.y;
+      // 2) Zoom quanh điểm chạm (focal point) để nội dung không trôi khỏi ngón tay
+      if (Math.abs(distRatio - 1) > 0.002) {
+        const newZoom = Math.max(1, Math.min(5, currentZoom * distRatio));
+        const cx = window.innerWidth / 2;
+        const cy = window.innerHeight / 2;
+        // Mô hình container: S = C + pan + z*(B - C)  →  B = C + (S - C - pan)/z
+        const bx = cx + (midX - cx - panX) / currentZoom;
+        const by = cy + (midY - cy - panY) / currentZoom;
+        panX = (midX - cx) - newZoom * (bx - cx);
+        panY = (midY - cy) - newZoom * (by - cy);
+        currentZoom = newZoom;
+      }
+
+      applyZoom();
+      twoFingerLastDist = dist;
+      twoFingerLastMid = { x: midX, y: midY };
+    }
+    return;
+  }
+  if (!controlEnabled) return;
+  const t = e.touches[0];
+  if (touchLastY !== null) {
+    const dy = t.clientY - touchLastY;
+    const clicks = Math.round(dy / 5);
+    if (clicks !== 0) {
+      sendMsg({ type: 'mouse_scroll', dy: clicks });
+      touchLastY = t.clientY;
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  if (twoFingerActive) {
+    if (e.touches.length < 2) {
+      twoFingerActive = false;
+      twoFingerLastDist = null;
+      twoFingerLastMid = null;
+    }
+    return;
+  }
+  if (!controlEnabled) return;
+  if (touchStartPos && e.changedTouches.length === 1) {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartPos.x;
+    const dy = t.clientY - touchStartPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const elapsed = Date.now() - touchStartTime;
+    if (dist < 10 && elapsed < 300) {
+      const { x, y } = toServerCoords(t.clientX, t.clientY);
+      sendMsg({ type: 'mouse_click', x, y, button: 1 });
+    }
+  }
+  touchStartPos = null;
+  touchLastY = null;
+});
+
+// ── Button handlers ───────────────────────────────────────────
+btnCtrl.addEventListener('click', () => {
+  controlEnabled = !controlEnabled;
+  btnCtrl.textContent = controlEnabled ? 'Control: ON' : 'Control: OFF';
+  btnCtrl.classList.toggle('active', controlEnabled);
+  canvas.style.cursor = controlEnabled ? 'crosshair' : 'default';
+});
+
+btnFullscreen.addEventListener('click', () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen();
+});
+
+btnSettings.addEventListener('click', () => {
+  settingsPanel.classList.toggle('show');
+  document.getElementById('inp-host').value = getServerUrl();
+  clearTimeout(hideTimer);
+});
+
+document.getElementById('btn-save-settings').addEventListener('click', () => {
+  const url = document.getElementById('inp-host').value.trim();
+  if (url) localStorage.setItem('server_url', url);
+  settingsPanel.classList.remove('show');
+  controlPanel.classList.remove('show');
+  arrowToggle.classList.remove('open');
+  hideTimer = setTimeout(hideUI, 3000);
+  connect();
+});
+
+document.getElementById('btn-close-settings').addEventListener('click', () => {
+  settingsPanel.classList.remove('show');
+  controlPanel.classList.remove('show');
+  arrowToggle.classList.remove('open');
+  hideTimer = setTimeout(hideUI, 3000);
+});
+
+btnKeyboard.addEventListener('click', () => {
+  const show = keyboardPanel.classList.toggle('show');
+  if (show) {
+    controlPanel.classList.add('show');
+    arrowToggle.classList.add('open');
+    arrowToggle.style.opacity = '1';
+    arrowToggle.style.pointerEvents = 'auto';
+    clearTimeout(hideTimer);
+  }
+});
+
+document.querySelectorAll('.key-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    sendMsg({ type: 'key_press', key: btn.dataset.key });
+  });
+});
+
+typeInput.addEventListener('keydown', (e) => { e.stopPropagation(); });
+typeInput.addEventListener('keyup', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') {
+    const text = typeInput.value;
+    if (text) {
+      sendMsg({ type: 'key_type', text });
+      sendMsg({ type: 'key_press', key: 'Return' });
+    }
+    typeInput.value = '';
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (!controlEnabled) return;
+  if (e.target === typeInput) return;
+  e.preventDefault();
+  let key = e.key;
+  if (key === ' ') key = 'space';
+  else if (key === 'ArrowUp') key = 'Up';
+  else if (key === 'ArrowDown') key = 'Down';
+  else if (key === 'ArrowLeft') key = 'Left';
+  else if (key === 'ArrowRight') key = 'Right';
+  else if (key === 'Escape') key = 'Escape';
+  else if (key === 'Enter') key = 'Return';
+  else if (key === 'Backspace') key = 'BackSpace';
+  else if (key === 'Delete') key = 'Delete';
+  else if (key === 'Tab') key = 'Tab';
+
+  if (e.ctrlKey && key !== 'ctrl') key = 'ctrl+' + key;
+  else if (e.altKey && key !== 'alt') key = 'alt+' + key;
+  else if (e.shiftKey && key !== 'shift') key = 'shift+' + key;
+  else if (e.metaKey && key !== 'super') key = 'super+' + key;
+
+  sendMsg({ type: 'key_press', key });
+});
+
+canvas.addEventListener('dblclick', (e) => {
+  if (!controlEnabled) return;
+  e.preventDefault();
+  const { x, y } = toServerCoords(e.clientX, e.clientY);
+  sendMsg({ type: 'mouse_click', x, y, button: 1 });
+  setTimeout(() => sendMsg({ type: 'mouse_click', x, y, button: 1 }), 50);
+});
+
+connect();
+</script>
+</body>
+</html>

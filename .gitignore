@@ -1,0 +1,32 @@
+﻿# Build artifacts
+release/server/build/
+release/web/dist/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+server/server_log.txt
+server/server_out.txt
+server/server_out_new.txt
+
+# Temp/Backup
+*.pid
+*.bak_*
+=
+changelog_tmp.txt
+
+# SSL certs
+server/cert.pem
+server/key.pem
+
+# Docs
+*.md
+!README.md
+
+# Release binaries (use gh release instead)
+*.exe
+*.spec

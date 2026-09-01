@@ -1,0 +1,2248 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Screen Viewer H264</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a1a;
+  overflow: hidden;
+  touch-action: manipulation;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #fff;
+  overscroll-behavior: none;
+}
+#video-container {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+#video-wrapper {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform-origin: center center;
+  transition: none;
+  width: max-content;
+  height: max-content;
+  touch-action: none;
+  will-change: transform;
+}
+#video-container canvas {
+  display: block;
+  touch-action: none;
+  image-rendering: auto;
+  image-rendering: -webkit-optimize-contrast;
+}
+#status-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+  padding: 8px 16px; display: flex; align-items: center; gap: 12px;
+  font-size: 13px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+#status-bar.visible { opacity: 1; pointer-events: auto; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.connected { background: #00e676; box-shadow: 0 0 6px #00e676; }
+.status-dot.disconnected { background: #ff5252; box-shadow: 0 0 6px #ff5252; }
+.status-dot.connecting { background: #ffc107; box-shadow: 0 0 6px #ffc107; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: 0.4; } }
+#fps-counter { margin-left: auto; color: #aaa; font-variant-numeric: tabular-nums; }
+#stats { color: #888; font-size: 11px; }
+#bottom-bar {
+  position: fixed; bottom: 14px; left: 0; right: 0; z-index: 101;
+  background: transparent; backdrop-filter: none;
+  padding: 6px 6px; display: flex; align-items: center; justify-content: space-between;
+  opacity: 0; pointer-events: none; touch-action: none;
+  height: 0; overflow: visible;
+}
+#bottom-bar > *, #bottom-bar .bottom-left *, #bottom-bar .bottom-right * {
+  opacity: 1 !important; pointer-events: auto !important; cursor: pointer;
+  position: relative; z-index: 102;
+}
+#bottom-bar .bottom-left, #bottom-bar .bottom-right {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+}
+#arrow-toggle {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1;
+  color: rgba(255,255,255,0.85);
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  transition: opacity 0.3s ease, background 0.2s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  box-shadow: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-callout: none;
+  -webkit-touch-callout: none;
+}
+#arrow-toggle:hover { background: rgba(255,255,255,0.22); }
+#arrow-toggle:active { background: rgba(255,255,255,0.12); transform: none; }
+#arrow-toggle:focus { outline: none; box-shadow: none; }
+#arrow-toggle:focus-visible { outline: none; box-shadow: none; }
+#arrow-toggle.open { transform: rotate(180deg); background: rgba(255,255,255,0.3); }
+#btn-keyboard-float {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.85);
+  font-size: 14px; line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s;
+  touch-action: none;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  box-shadow: none;
+  touch-callout: none;
+  -webkit-touch-callout: none;
+}
+#btn-keyboard-float:hover { background: rgba(255,255,255,0.22); }
+#btn-keyboard-float:active { background: rgba(255,255,255,0.12); }
+#btn-keyboard-float:focus { outline: none; box-shadow: none; }
+#btn-keyboard-float:focus-visible { outline: none; box-shadow: none; }
+#btn-keyboard-float.active { background: rgba(0,230,118,0.3); color: #00e676; }
+#control-panel {
+  position: fixed; bottom: 54px; left: 0; right: 0; z-index: 100;
+  background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
+  padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 12px;
+  transform: translateY(120%); transition: transform 0.3s ease, visibility 0.3s;
+  visibility: hidden; pointer-events: none; touch-action: none;
+}
+#control-panel.show { transform: translateY(0); visibility: visible; pointer-events: auto; }
+.toolbar-btn {
+  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
+  color: #fff; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; transition: all 0.2s; white-space: nowrap;
+  user-select: none; -webkit-user-select: none; -ms-user-select: none;
+}
+.toolbar-btn:hover { background: rgba(255,255,255,0.25); }
+.toolbar-btn.active { background: #00e676; color: #000; border-color: #00e676; }
+.key-btn.armed { background: #000; color: #00e676; border-color: #00e676; font-weight: bold; }
+.key-btn.pending { background: #ffb300; color: #000; border-color: #ffb300; font-weight: bold; }
+#combo-display { text-align:center; margin-bottom:8px; color:#00e676; font-size:14px; min-height:18px; }
+#settings-panel {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #16213e; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px; padding: 24px; z-index: 200; min-width: 300px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: none;
+  pointer-events: auto; touch-action: none;
+}
+#settings-panel.show { display: block; }
+#settings-panel h3 { margin-bottom: 16px; font-size: 16px; }
+.setting-row { margin-bottom: 12px; }
+.setting-row label { display: block; font-size: 12px; color: #aaa; margin-bottom: 4px; }
+.setting-row input {
+  width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+  color: #fff; font-size: 14px; outline: none;
+}
+.setting-row input:focus { border-color: #00e676; }
+.settings-actions { display: flex; gap: 8px; margin-top: 16px; }
+#keyboard-panel {
+  display:none; position:fixed;   bottom:54px; left:0; right:0; z-index:150;
+  background:rgba(0,0,0,0.85); padding:10px 8px 12px; max-height:42vh; overflow-y:auto;
+  pointer-events:auto; touch-action:none;
+}
+#keyboard-panel.show { display:block; }
+#keyboard-toggle-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.85);
+  font-size: 14px; line-height: 1;
+  cursor: pointer; backdrop-filter: none;
+  transition: all 0.2s;
+  pointer-events: auto; touch-action: none;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#keyboard-toggle-btn:hover { background: rgba(255,255,255,0.25); }
+#keyboard-toggle-btn:active { background: rgba(255,255,255,0.12); }
+#keyboard-toggle-btn:focus { outline: none; background: rgba(255,255,255,0.12); }
+.key-grid { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+#codec-badge {
+  position: fixed; top: 8px; right: 8px; z-index: 102;
+  background: rgba(0,150,0,0.8); border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; font-weight: bold;
+  pointer-events: none; opacity: 0; transition: opacity 0.3s;
+}
+#codec-badge.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="codec-badge">H.264 WebCodecs + PCM</div>
+
+<div id="status-bar">
+  <div class="status-dot connecting" id="status-dot"></div>
+  <span id="status-text">Connecting...</span>
+  <span id="audio-indicator" style="font-size:11px;color:#888;margin-left:8px;"></span>
+  <span id="stats"></span>
+  <span id="fps-counter">0 FPS</span>
+</div>
+
+<div id="video-container"><div id="video-wrapper"></div></div>
+
+<div id="bottom-bar">
+  <div class="bottom-left">
+    <button id="btn-keyboard-float" title="Bàn phím">&#9000;</button>
+  </div>
+  <div class="bottom-right">
+    <button id="keyboard-toggle-btn" title="Ẩn/Hiện bàn phím ảo">▼</button>
+    <button id="arrow-toggle">&#9650;</button>
+  </div>
+</div>
+
+<div id="control-panel" onpointerdown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+  <button class="toolbar-btn" id="btn-ctrl">Control: ON</button>
+  <button class="toolbar-btn" id="btn-fullscreen">Fullscreen</button>
+  <button class="toolbar-btn" id="btn-settings">Settings</button>
+</div>
+
+<div id="settings-panel" onpointerdown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+  <h3>Settings</h3>
+  <div class="setting-row">
+    <label>Server IP</label>
+    <input id="inp-host" type="text" placeholder="wss://192.168.x.x:8766">
+  </div>
+  <div class="setting-row">
+    <label>Màn hình phát (Display)</label>
+    <select id="sel-display" style="width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff; font-size: 14px; outline: none; margin-bottom: 6px;">
+      <option value="0" style="background:#222;color:#fff">Màn hình 1 (Chính)</option>
+    </select>
+    <button class="toolbar-btn" id="btn-refresh-displays" style="width:100%;font-size:12px;padding:6px 0;margin-top:2px;">Quét lại danh sách màn hình</button>
+  </div>
+  <div class="settings-actions">
+    <button class="toolbar-btn" id="btn-switch-display">Chuyển Màn Hình</button>
+    <button class="toolbar-btn" id="btn-save-settings">Save & Reconnect</button>
+    <button class="toolbar-btn" id="btn-close-settings">Close</button>
+  </div>
+</div>
+
+<div id="keyboard-panel" onpointerdown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+  <div id="combo-display"></div>
+  <div class="key-grid">
+    <button class="toolbar-btn key-btn" data-key="Escape">Esc</button>
+    <button class="toolbar-btn key-btn" data-key="Tab">Tab</button>
+    <button class="toolbar-btn key-btn" data-key="BackSpace">Bksp</button>
+    <button class="toolbar-btn key-btn" data-key="Return">Enter</button>
+    <button class="toolbar-btn key-btn" data-key="space">Space</button>
+    <button class="toolbar-btn key-btn" data-key="Delete">Del</button>
+    <button class="toolbar-btn key-btn" data-key="Insert">Ins</button>
+    <button class="toolbar-btn key-btn" data-key="Up">Up</button>
+    <button class="toolbar-btn key-btn" data-key="Down">Down</button>
+    <button class="toolbar-btn key-btn" data-key="Left">Left</button>
+    <button class="toolbar-btn key-btn" data-key="Right">Right</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl">Ctrl</button>
+    <button class="toolbar-btn key-btn" data-key="alt">Alt</button>
+    <button class="toolbar-btn key-btn" data-key="shift">Shift</button>
+    <button class="toolbar-btn key-btn" data-key="super">Super</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+a">Ctrl+A</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+c">Ctrl+C</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+v">Ctrl+V</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+z">Ctrl+Z</button>
+    <button class="toolbar-btn key-btn" data-key="ctrl+s">Ctrl+S</button>
+    <button class="toolbar-btn key-btn" data-key="alt+Tab">Alt+Tab</button>
+    <!-- <button class="toolbar-btn key-btn" data-key="alt+F4">Alt+F4</button> -->
+    <button class="toolbar-btn key-btn" data-key="F5">F5</button>
+    <button class="toolbar-btn key-btn" data-key="F11">F11</button>
+  </div>
+</div>
+
+<!-- Hidden input: mobile keyboard hiện lên khi focus, không hiện UI -->
+<input id="hidden-input" type="text"
+  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+  style="position:fixed; top:0; left:0; width:1px; height:1px; opacity:0.01; pointer-events:none; border:none; outline:none; background:transparent; z-index:-1;">
+
+<script src="broadway-decoder.js"></script>
+<script src="broadway-yuv.js"></script>
+<script src="broadway-player.js"></script>
+<script>
+console.log('[INIT] viewer_H264wss_P_new.html script started, DOM ready:', !!document.getElementById('btn-ctrl'));
+const container = document.getElementById('video-container');
+const statusDot = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+const fpsCounter = document.getElementById('fps-counter');
+const statsEl = document.getElementById('stats');
+const statusBar = document.getElementById('status-bar');
+const arrowToggle = document.getElementById('arrow-toggle');
+const controlPanel = document.getElementById('control-panel');
+const btnCtrl = document.getElementById('btn-ctrl');
+const btnFullscreen = document.getElementById('btn-fullscreen');
+const btnSettings = document.getElementById('btn-settings');
+const btnKeyboard = document.getElementById('btn-keyboard-float');
+// const btnFocusTarget = document.getElementById('btn-focus-target');  // Đã bỏ typing area
+const settingsPanel = document.getElementById('settings-panel');
+const keyboardPanel = document.getElementById('keyboard-panel');
+const hiddenInput = document.getElementById('hidden-input');
+// const typingArea = document.getElementById('typing-area');  // Đã bỏ typing area
+// const typeInput = document.getElementById('type-input');     // Đã bỏ typing area
+const codecBadge = document.getElementById('codec-badge');
+
+let controlEnabled = true;
+btnCtrl.textContent = 'Control: ON';
+btnCtrl.classList.add('active');
+let screenInfo = { width: 1920, height: 1080, scale: 100 };
+let frameCount = 0;
+let lastFpsTime = Date.now();
+let serverUrl = '';
+
+// ── H.264 Decoder (WebCodecs + Broadway fallback) ────────────
+let canvas = null;
+let ctx2d = null;
+let videoDecoder = null;
+let decoderConfigured = false;
+let decoderReady = false;
+let _isConfiguring = false;
+let _pendingKeyframe = null;
+let decodedCount = 0;
+let decodeCount = 0;
+let cachedSPS = null;
+let cachedPPS = null;
+let tsUs = 0;
+let frameIntervalUs = 1000000 / 45;  // 45fps mặc định; sẽ lấy fps thật từ server (init msg)
+let decoderMode = null;
+let bwayPlayer = null;
+
+// NEW [O_new]: Pre-allocated reusable NAL slot array (tránh GC mỗi frame)
+// Mỗi frame server thường chỉ có 1-3 NAL (1 IDR, 1 P) nên 8 slot là đủ cho hầu hết trường hợp
+const _nalSlots = new Array(8).fill(null).map(() => ({ type: 0, start: 0, end: 0, scLen: 0 }));
+let _nalSlotCount = 0;
+
+// NEW [O_new]: AVCC output buffer reuse (annexBToAVCC dùng buffer tái sử dụng)
+let _avccOut = new Uint8Array(0);
+
+// NEW [O_new]: Decode queue depth threshold - khi queue < threshold thì KHÔNG drop (mượt hơn),
+// chỉ drop khi queue vượt HARD_LIMIT (giảm lag tích lũy)
+const DECODE_QUEUE_SOFT_LIMIT = 2;   // < 2: bỏ qua drop, giữ mượt
+const DECODE_QUEUE_HARD_LIMIT = 4;   // > 4: drop frame delta (chống lag tích lũy)
+
+// === NEW [2026-08-09 Fix Refresh] + [2026-08-12 Force Refresh]: watchdog frame stall ===
+let _lastRenderTs = 0;
+let _wsConnectTs = 0;  // [2026-08-12] mốc thời điểm kết nối WS (để watchdog cứu khi chưa render được frame đầu)
+const STALL_TIMEOUT_MS = 3000;
+// [2026-08-12 Force Refresh] Ngưỡng ép reconnect khi server chết lặng (qua 3s keyframe không có tác dụng)
+const STALL_RECONNECT_MS = 8000;
+
+// NEW [O_new]: Helper - tìm next start code từ vị trí i (C-speed)
+function _findStartCode(data, i, len) {
+  while (i < len - 2) {
+    if (data[i] === 0 && data[i + 1] === 0) {
+      if (data[i + 2] === 1) return [i, 3];
+      if (i + 3 < len && data[i + 2] === 0 && data[i + 3] === 1) return [i, 4];
+    }
+    i++;
+  }
+  return [-1, 0];
+}
+
+function parseAnnexBNALs(data) {
+  // NEW [O_new]: Optimized parser - dùng _findStartCode (linear scan nhanh hơn nested byte-scan),
+  // kết quả ghi vào _nalSlots tránh alloc mỗi frame
+  const len = data.length;
+  const slots = _nalSlots;
+  let count = 0;
+  const maxSlots = slots.length;
+  let i = 0;
+  let curStart, curSc;
+  let nextStart, nextSc;
+  let pos = 0;
+
+  while (i < len) {
+    const found = _findStartCode(data, i, len);
+    if (found[0] < 0) break;
+    curStart = found[0];
+    curSc = found[1];
+    // Tìm start code tiếp theo
+    const next = _findStartCode(data, curStart + curSc, len);
+    nextStart = next[0] >= 0 ? next[0] : len;
+    if (count < maxSlots) {
+      const slot = slots[count++];
+      slot.type = data[curStart + curSc] & 0x1f;
+      slot.start = curStart;
+      slot.end = nextStart;
+      slot.scLen = curSc;
+    } else {
+      break;  // quá nhiều NAL, bỏ phần còn lại
+    }
+    if (nextStart >= len) break;
+    i = nextStart;
+  }
+  _nalSlotCount = count;
+  return { count, slots: slots };  // trả về object để tương thích API cũ
+}
+
+function buildAvcC(sps, pps) {
+  const spsLen = sps.length;
+  const ppsLen = pps.length;
+  const box = new Uint8Array(5 + 1 + 3 + 1 + 2 + spsLen + 1 + 2 + ppsLen);
+  let off = 0;
+  box[off++] = 0x01;
+  box[off++] = sps[1];
+  box[off++] = sps[2];
+  box[off++] = sps[3];
+  box[off++] = 0xff;
+  box[off++] = 0xe1;
+  box[off++] = (spsLen >> 8) & 0xff;
+  box[off++] = spsLen & 0xff;
+  box.set(sps, off); off += spsLen;
+  box[off++] = 0x01;
+  box[off++] = (ppsLen >> 8) & 0xff;
+  box[off++] = ppsLen & 0xff;
+  box.set(pps, off);
+  return box;
+}
+
+function getCodecString(sps) {
+  if (!sps || sps.length < 4) {
+    console.warn('[DEC] Invalid SPS, using default avc1.64001f');
+    return 'avc1.64001f';
+  }
+  const p = sps[1];
+  const c = sps[2];
+  const l = sps[3];
+  return 'avc1.' + p.toString(16).padStart(2,'0') + c.toString(16).padStart(2,'0') + l.toString(16).padStart(2,'0');
+}
+
+function annexBToAVCC(data, nalsObj) {
+  // NEW [O_new]: tối ưu - dùng slots tránh alloc object mỗi frame, reuse _avccOut buffer
+  const nals = nalsObj.slots;
+  const n = nalsObj.count;
+  const skipTypes = _skipTypesSet;
+  let totalLen = 0;
+  let outN = 0;
+
+  // Đếm & tính size 1 lần
+  for (let i = 0; i < n; i++) {
+    const t = nals[i].type;
+    if (skipTypes.has(t)) continue;
+    totalLen += 4 + (nals[i].end - nals[i].start - nals[i].scLen);
+  }
+  if (totalLen === 0) return new Uint8Array(0);
+
+  if (_avccOut.length < totalLen) {
+    _avccOut = new Uint8Array(totalLen);
+  }
+  const out = _avccOut.subarray(0, totalLen);
+  let off = 0;
+  for (let i = 0; i < n; i++) {
+    const nal = nals[i];
+    const t = nal.type;
+    if (skipTypes.has(t)) continue;
+    const naluLen = nal.end - nal.start - nal.scLen;
+    out[off++] = (naluLen >> 24) & 0xff;
+    out[off++] = (naluLen >> 16) & 0xff;
+    out[off++] = (naluLen >> 8) & 0xff;
+    out[off++] = naluLen & 0xff;
+    out.set(data.subarray(nal.start + nal.scLen, nal.end), off);
+    off += naluLen;
+    outN++;
+  }
+  return out;
+}
+const _skipTypesSet = new Set([7, 8, 6]);
+
+function initDecoder(width, height) {
+  cleanupDecoder();
+  console.log('[DEC] initDecoder', width, 'x', height, 'WebCodecs:', 'VideoDecoder' in window, 'Player:', typeof Player);
+
+  // ===== 1. WEBCODECS (hardware decode, ưu tiên) =====
+  if ('VideoDecoder' in window) {
+    try {
+      videoDecoder = new VideoDecoder({
+        output: (frame) => {
+          decodedCount++;
+          // console.log('[WC] decoded frame', frame.displayWidth, 'x', frame.displayHeight, '#', decodedCount); // TODO: bật lại khi debug video
+          renderFrame(frame.displayWidth, frame.displayHeight, (ctx) => ctx.drawImage(frame, 0, 0));
+          frame.close();
+        },
+        error: (e) => {
+          console.error('[WC] Decoder error:', e.message);
+          sendDebug('wc_error', { msg: e.message });
+          requestRemoteKeyframe();
+        }
+      });
+      decoderMode = 'webcodecs';
+      return true;
+    } catch(e) { console.warn('[WC] init failed:', e.message); }
+  }
+
+  // ===== 2. BROADWAY (software decode, fallback) =====
+  if (typeof Player !== 'undefined') {
+    try {
+      bwayPlayer = new Player({ useWorker: true, sliceMode: true, sliceNum: 0, size: { width, height } });
+      canvas = bwayPlayer.canvas;
+      canvas.style.backgroundColor = '#0a0a1a';
+      canvas.style.cursor = 'crosshair';
+      container.querySelector('#video-wrapper').appendChild(canvas);
+      ctx2d = null;
+      bwayPlayer.onPictureDecoded = function(buffer, width, height, infos) {
+        decodedCount++;
+      };
+      decoderMode = 'broadway';
+      setupCanvasEvents();
+      fitCanvas();
+      return true;
+    } catch(e) { console.error('[BRO] init failed:', e.message); }
+  }
+
+  console.error('[DEC] No decoder available');
+  return false;
+}
+
+function cleanupDecoder() {
+  if (videoDecoder) {
+    try {
+      if (videoDecoder.state !== 'closed') videoDecoder.close();
+    } catch(e) {}
+  }
+  videoDecoder = null;
+  decoderConfigured = false;
+  decoderReady = false;
+  _isConfiguring = false;
+  _pendingKeyframe = null;
+  if (bwayPlayer && canvas && canvas.parentNode) {
+    try { canvas.parentNode.removeChild(canvas); } catch(e) {}
+  }
+  bwayPlayer = null;
+  // KHÔNG remove canvas khỏi DOM để giữ lại frame cuối, tránh màn hình đen khi tab ẩn/hiện hoặc reconnect
+  decodedCount = 0;
+  decodeCount = 0;
+  tsUs = 0;
+  // [2026-08-12] Reset mốc watchdog khi decoder bị phá (kể cả path visibility/tab-wake) để
+  // cho decoder mới 3s/8s ân hạn. Nếu không, WS vẫn OPEN + _lastRenderTs=0 → watchdog dùng
+  // _wsConnectTs cũ (phút trước) → since>8s ngay tick đầu → force-reconnect vòng lặp.
+  _wsConnectTs = Date.now();
+}
+
+function renderFrame(w, h, drawFn) {
+  _lastRenderTs = Date.now();
+  if (decoderMode === 'webcodecs') {
+    if (!canvas || !canvas.parentNode) {
+      canvas = container.querySelector('#video-wrapper canvas');
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.style.backgroundColor = '#0a0a1a';
+        canvas.style.cursor = controlEnabled ? 'crosshair' : 'default';
+        container.querySelector('#video-wrapper').appendChild(canvas);
+      }
+      ctx2d = canvas.getContext('2d', { desynchronized: true });
+      setupCanvasEvents();
+    }
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      fitCanvas();
+    }
+    drawFn(ctx2d);
+    document.getElementById('stats').textContent = w + 'x' + h + ' #' + decodedCount;
+  }
+}
+
+async function configureDecoder(sps, pps, width, height) {
+  if (!videoDecoder || _isConfiguring) return;
+  _isConfiguring = true;
+  const desc = buildAvcC(sps, pps);
+  // console.log('[WC] SPS:', sps ? sps.length : 0, 'bytes, PPS:', pps ? pps.length : 0, 'bytes, desc:', desc ? desc.length : 0, 'bytes');
+  // console.log('[WC] Codec string from SPS:', getCodecString(sps));
+  // Thử nhiều codec + hardware config
+  const codecs = [
+    getCodecString(sps),
+    'avc1.42001f',
+    'avc1.42001e',
+    'avc1.4d001f',
+    'avc1.64001f',
+    'avc1.42e01f',
+  ];
+  const hwOpts = [
+    { hardwareAcceleration: 'prefer-hardware' },
+    { hardwareAcceleration: 'no-preference' },
+    {},
+  ];
+  const unique = [...new Set(codecs)];
+  try {
+    for (const hw of hwOpts) {
+      for (const codec of unique) {
+        if (!videoDecoder) break;
+        const config = {
+          codec: codec,
+          codedWidth: width,
+          codedHeight: height,
+          description: desc,
+          latencyMode: 'realtime',
+          optimizeForLatency: true,
+          ...hw,
+        };
+        try {
+          const supported = await VideoDecoder.isConfigSupported(config);
+          if (supported.supported && videoDecoder) {
+            videoDecoder.configure(config);
+            decoderConfigured = true;
+            decoderReady = false;
+            console.log('[WC] Configured:', codec, hw.hardwareAcceleration || 'no-hw');
+            _isConfiguring = false;
+            if (_pendingKeyframe) {
+              const kf = _pendingKeyframe;
+              _pendingKeyframe = null;
+              decodeFrame(kf);
+            } else {
+              requestRemoteKeyframe(true);
+            }
+            return;
+          }
+        } catch(e) {}
+      }
+    }
+    console.error('[WC] No supported codec found');
+    sendDebug('wc_no_codec', {});
+    decoderMode = null;
+  } finally {
+    _isConfiguring = false;
+  }
+}
+
+function decodeFrame(data) {
+  if (decoderMode === 'webcodecs') {
+    if (!videoDecoder) return;
+    const nalsObj = parseAnnexBNALs(data);
+    const slots = nalsObj.slots;
+    let isKey = false;
+    for (let i = 0; i < nalsObj.count; i++) {
+      if (slots[i].type === 5) { isKey = true; break; }
+    }
+    if (!decoderConfigured || _isConfiguring) {
+      if (isKey) _pendingKeyframe = data;
+      requestRemoteKeyframe();
+      return;
+    }
+    const avcc = annexBToAVCC(data, nalsObj);
+    if (avcc.length === 0) { requestRemoteKeyframe(); return; }
+
+    // NEW [O_new]: 2-tier queue control - SOFT (giữ mượt) + HARD (chống lag tích lũy)
+    const q = videoDecoder.decodeQueueSize;
+    if (q > DECODE_QUEUE_HARD_LIMIT) {
+      if (!isKey) return;
+      // Keyframe vẫn reset queue để tránh kẹt trắng
+      videoDecoder.reset();
+      decoderReady = false;
+    }
+    // Sau configure, PHẢI nhận keyframe trước khi decode được
+    if (!isKey && !decoderReady) {
+      requestRemoteKeyframe();
+      return;
+    }
+    try {
+      videoDecoder.decode(new EncodedVideoChunk({
+        type: isKey ? 'key' : 'delta',
+        timestamp: tsUs,
+        data: avcc,
+      }));
+      decoderReady = true;
+      tsUs += frameIntervalUs;
+    } catch (e) {
+      if (decodeCount <= 3) console.error('[WC] decode error:', e.message);
+      requestRemoteKeyframe();
+    }
+  } else if (decoderMode === 'broadway' && bwayPlayer) {
+    try { bwayPlayer.decode(data); } catch(e) { console.error('[BRO] decode error:', e); sendDebug('bway_error', { msg: String(e) }); }
+  }
+}
+
+function fitCanvas() {
+  if (!canvas) return;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const cw = screenInfo.width;
+  const ch = screenInfo.height;
+  const aspect = cw / ch;
+  let dw, dh;
+  if (aspect > vw / vh) { dw = vw; dh = vw / aspect; }
+  else { dh = vh; dw = vh * aspect; }
+  canvas.style.width = dw + 'px';
+  canvas.style.height = dh + 'px';
+  fitW = dw; fitH = dh;   // lưu kích thước vùa khét (zoom=1) để clampPan dùng
+  _cachedRect = null;  // Invalidate cache khi resize
+  if (!userZoomed) { currentZoom = 1; panX = 0; panY = 0; }
+  clampPan();
+  applyZoom();
+}
+window.addEventListener('resize', () => {
+  if (isKeyboardActive()) return;
+  if (currentZoom === 1 && !userZoomed) fitCanvas();
+});
+
+// Ngăn mobile browser scroll khi keyboard xuất hiện
+// Đồng thời phát hiện keyboard thật bị đóng (Back) → blur hidden-input
+// để tap vào nút không kéo keyboard thật lên lại
+if (window.visualViewport) {
+  let _lastVH = window.visualViewport.height;
+  window.visualViewport.addEventListener('resize', () => {
+    const vh = window.visualViewport.height;
+    if (isKeyboardActive()) {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+    }
+    // Keyboard thật bị đóng: viewport cao trở lại → bỏ focus khỏi hidden-input
+    if (vh > _lastVH + 80 && document.activeElement === hiddenInput) {
+      hiddenInput.blur();
+    }
+    _lastVH = vh;
+  });
+}
+
+function setupCanvasEvents() {
+  if (!canvas || canvas._eventsBound) return;
+  canvas._eventsBound = true;
+  canvas.addEventListener('mousedown', (e) => {
+    if (!controlEnabled) return;
+    e.preventDefault();
+    const { x, y } = toServerCoords(e.clientX, e.clientY);
+    const btn = e.button === 2 ? 3 : e.button === 1 ? 2 : 1;
+    sendMsg({ type: 'mouse_down', x, y, button: btn });
+  });
+  canvas.addEventListener('mouseup', (e) => {
+    if (!controlEnabled) return;
+    e.preventDefault();
+    const { x, y } = toServerCoords(e.clientX, e.clientY);
+    const btn = e.button === 2 ? 3 : e.button === 1 ? 2 : 1;
+    sendMsg({ type: 'mouse_up', x, y, button: btn });
+  });
+  canvas.addEventListener('click', (e) => {
+    if (!controlEnabled) return;
+    e.preventDefault();
+    const { x, y } = toServerCoords(e.clientX, e.clientY);
+    const btn = e.button === 2 ? 3 : e.button === 1 ? 2 : 1;
+    sendMsg({ type: 'mouse_click', x, y, button: btn });
+  });
+  canvas.addEventListener('mousemove', (e) => {
+    if (!controlEnabled) return;
+    const { px, py, x, y } = toServerCoords(e.clientX, e.clientY);
+    sendMouseMove(px, py, x, y);
+  });
+  canvas.addEventListener('wheel', (e) => {
+    if (!controlEnabled) return;
+    e.preventDefault();
+    sendMsg({ type: 'mouse_scroll', dy: e.deltaY > 0 ? -1 : 1 });
+  }, { passive: false });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  // Gắn touchstart vào container (phủ toàn màn hình, nằm dưới UI) để cử chỉ
+  // có thể bắt đầu ngay cả ở vùng đen letterbox. Gắn move/end/cancel vào window
+  // để cử chỉ 2 ngón tiếp tục hoạt động khi ngón tay ra ngoài canvas / mép màn hình.
+  // Touch events on window (works on both mobile and desktop)
+  window.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+  window.addEventListener('touchmove', onTouchMove, { passive: false });
+  window.addEventListener('touchend', onTouchEnd, { passive: false });
+  window.addEventListener('touchcancel', onTouchEnd, { passive: false });
+  canvas.addEventListener('dblclick', (e) => {
+    if (!controlEnabled) return;
+    e.preventDefault();
+    const { x, y } = toServerCoords(e.clientX, e.clientY);
+    sendMsg({ type: 'mouse_click', x, y, button: 1 });
+    setTimeout(() => sendMsg({ type: 'mouse_click', x, y, button: 1 }), 50);
+  });
+}
+
+// ── Audio: PCM raw via ScriptProcessorNode ──
+let audioCtx = null;
+let audioPkts = 0;
+let audioBytes = 0;
+let audioNode = null;        // AudioWorkletNode
+let audioStarted = false;
+let AUDIO_SRC_RATE = 48000;  // sample rate of PCM sent by server (set from init msg)
+const SAMPLE_RATE = 48000;
+const CHANNELS = 2;
+const RING_SAMPLES = SAMPLE_RATE * 0.5;   // 0.5s ring-buffer (đủ nuốt jitter nhỏ, giảm trễ)
+const PREBUFFER_SAMPLES = SAMPLE_RATE * 0.02;  // ~20ms trước khi phát (giảm trễ, vẫn mượt)
+const audioIndicator = document.getElementById('audio-indicator');
+
+// Ring-buffer chia sẻ main-thread ↔ worklet (Float32 interleaved L/R)
+let ringBuf = null;
+let ringWrite = 0;
+let ringRead = 0;
+let ringFilled = 0;
+
+// ── AudioWorklet (chạy trên audio-thread riêng, mát hơn main-thread) ──
+// Có fallback ScriptProcessorNode nếu trình duyệt không hỗ trợ AudioWorklet.
+let audioWorkletReady = false;
+let pendingPCM = [];   // đệm PCM chờ worklet sẵn sàng
+
+const PCM_WORKLET_SRC = `
+class PCMPlayer extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.cap = Math.floor(sampleRate * 0.5) * 2;
+    this.ring = new Float32Array(this.cap);
+    this.w = 0; this.r = 0; this.filled = 0;
+    this.prebuffer = Math.floor(sampleRate * 0.03) * 2;
+    this.started = false;
+        this.port.onmessage = (e) => {
+          const data = e.data; const n = data.length;
+          for (let i = 0; i < n; i++) {
+            this.ring[this.w] = data[i];
+            this.w = (this.w + 1) % this.cap;
+            if (this.filled >= this.cap) {
+              // Ring đầy, loại bỏ data cũ để consumer không đọc lại (echo)
+              this.r = (this.r + 1) % this.cap;
+            } else {
+              this.filled++;
+            }
+          }
+        };
+  }
+  process(_inputs, outputs) {
+    const out = outputs[0]; const L = out[0], R = out[1];
+    if (!L) return true;
+    if (!this.started && this.filled >= this.prebuffer) this.started = true;
+    for (let i = 0; i < L.length; i++) {
+      if (this.started && this.filled >= 2) {
+        L[i] = this.ring[this.r];
+        R[i] = this.ring[(this.r + 1) % this.cap];
+        this.r = (this.r + 2) % this.cap;
+        this.filled -= 2;
+      } else { L[i] = 0; R[i] = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-player', PCMPlayer);
+`;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)(); // Native sampleRate
+  const actualRate = audioCtx.sampleRate;
+  console.log('[AUDIO] Browser sampleRate:', actualRate);
+  ringBuf = new Float32Array(RING_SAMPLES);
+  ringWrite = new Int32Array(1); ringRead = new Int32Array(1); ringFilled = new Int32Array(1);
+  audioCtx.resume().then(() => console.log('[AUDIO] Context resumed')).catch(() => {});
+
+  if (audioCtx.audioWorklet) {
+    try {
+      const url = URL.createObjectURL(new Blob([PCM_WORKLET_SRC], { type: 'application/javascript' }));
+      audioCtx.audioWorklet.addModule(url).then(() => {
+        audioNode = new AudioWorkletNode(audioCtx, 'pcm-player', { outputChannelCount: [2] });
+        audioNode.connect(audioCtx.destination);
+        audioWorkletReady = true;
+        for (const pcm of pendingPCM) audioNode.port.postMessage(pcm);
+        pendingPCM = [];
+        console.log('[AUDIO] AudioWorklet initialized');
+      }).catch((e) => { console.warn('[AUDIO] Worklet failed, fallback SP:', e); initScriptProcessor(); });
+    } catch (e) { console.warn('[AUDIO] Worklet error, fallback SP:', e); initScriptProcessor(); }
+  } else {
+    initScriptProcessor();
+  }
+}
+
+// Fallback: ScriptProcessorNode (deprecated, chạy trên main-thread)
+function initScriptProcessor() {
+  audioNode = audioCtx.createScriptProcessor(4096, 2, 2);
+  audioNode.onaudioprocess = function(e) {
+    const out = e.outputBuffer;
+    const L = out.getChannelData(0);
+    const R = out.getChannelData(1);
+    const ring = ringBuf, cap = ring.length;
+    const r = Atomics.load(ringRead, 0);
+    let filled = Atomics.load(ringFilled, 0);
+    for (let i = 0; i < L.length; i++) {
+      if (filled >= 2) {
+        L[i] = ring[(r + i*2) % cap];
+        R[i] = ring[(r + i*2 + 1) % cap];
+      } else { L[i] = 0; R[i] = 0; }
+    }
+    Atomics.store(ringRead, 0, (r + L.length * 2) % cap);
+    Atomics.store(ringFilled, 0, Math.max(0, filled - L.length * 2));
+  };
+  audioNode.connect(audioCtx.destination);
+  console.log('[AUDIO] ScriptProcessorNode initialized, buffer:', audioNode.bufferSize);
+}
+
+function playPCMChunk(raw) {
+  audioBytes += raw.length;
+  const samples = new Int16Array(raw.buffer, raw.byteOffset, raw.length / 2);
+  if (samples.length === 0) return;
+  const SRC_RATE = AUDIO_SRC_RATE;  // actual sample rate from server (init msg)
+  const DST_RATE = audioCtx ? audioCtx.sampleRate : 48000;
+  const pcm = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) pcm[i] = samples[i] / 32768;
+
+  // Resample nếu sample rate khác
+  let output = pcm;
+  if (DST_RATE !== SRC_RATE) {
+    const ratio = SRC_RATE / DST_RATE;
+    const outLen = Math.floor(samples.length / ratio);
+    output = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const srcIdx = i * ratio;
+      const idx = Math.floor(srcIdx);
+      const frac = srcIdx - idx;
+      const next = Math.min(idx + 1, samples.length - 1);
+      output[i] = pcm[idx] * (1 - frac) + pcm[next] * frac;
+    }
+  }
+
+  if (audioWorkletReady && audioNode && audioNode.port) {
+    audioNode.port.postMessage(output);
+  } else if (audioNode && audioNode.onaudioprocess) {
+    const ring = ringBuf, cap = ring.length;
+    const w = Atomics.load(ringWrite, 0);
+    let filled = Atomics.load(ringFilled, 0);
+    for (let i = 0; i < output.length && filled < cap; i++) ring[(w + i) % cap] = output[i];
+    Atomics.store(ringWrite, 0, (w + output.length) % cap);
+    Atomics.store(ringFilled, 0, Math.min(cap, filled + output.length));
+  } else {
+    // Worklet chưa kịp sẵn sàng → đệm lại (tránh mất audio lúc đầu)
+    pendingPCM.push(output);
+    if (pendingPCM.length > 200) pendingPCM.shift();
+  }
+}
+
+function resumeAudio() {
+  if (!audioCtx) initAudio();
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+}
+document.addEventListener('click', resumeAudio);
+document.addEventListener('touchstart', resumeAudio);
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+// Watchdog: tự resume AudioContext nếu bị suspend (chống nghẽn → 1006)
+setInterval(() => {
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+}, 1000);
+
+// ── Autohide toolbar ──────────────────────────────────────────
+let hideTimer = null;
+const AUTO_HIDE_DELAY = 4000; // 4s
+
+function isKeyboardActive() {
+  return keyboardPanel.classList.contains('show');
+}
+
+function showUI() {
+  statusBar.classList.add('visible');
+  const bb = document.getElementById('bottom-bar');
+  if (bb) { bb.style.opacity = '1'; bb.style.pointerEvents = 'auto'; }
+  arrowToggle.style.opacity = '1';
+  arrowToggle.style.pointerEvents = 'auto';
+  btnKeyboard.style.opacity = '1';
+  btnKeyboard.style.pointerEvents = 'auto';
+  if (isKeyboardActive()) {
+    clearTimeout(hideTimer);
+    return;
+  }
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(hideUI, AUTO_HIDE_DELAY);
+}
+
+function hideUI() {
+  if (settingsPanel.classList.contains('show')) return;
+  if (isKeyboardActive()) {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      if (!isKeyboardActive()) { hideUI(); }
+    }, 1500);
+    return;
+  }
+  statusBar.classList.remove('visible');
+  const bb = document.getElementById('bottom-bar');
+  if (bb) { bb.style.opacity = '0'; bb.style.pointerEvents = 'none'; }
+  arrowToggle.classList.remove('open');
+  if (!document.fullscreenElement) {
+    arrowToggle.style.opacity = '0';
+    arrowToggle.style.pointerEvents = 'none';
+    btnKeyboard.style.opacity = '0';
+    btnKeyboard.style.pointerEvents = 'none';
+  }
+}
+
+function _doHideKeyboard() {
+  if (keyboardPanel.classList.contains('show')) {
+    keyboardPanel.classList.remove('show');
+    document.getElementById('keyboard-toggle-btn').textContent = '▼';
+  }
+  // Thả hết modifier đang giữ để tránh kẹt phím ở server
+  if (armedMods.size > 0) resetCombo();
+}
+
+// Click/touch vào vùng video (màn hình remote) → ẩn keyboard
+let _hideKeyboardTimer = null;
+container.addEventListener('pointerdown', (e) => {
+  if (twoFingerActive) return;
+  const target = e.target;
+  const isKeyboardArea = target.closest('#keyboard-panel') || target.closest('#control-panel') || target.closest('#settings-panel') || target.closest('#bottom-bar');
+  const isArrowOrKeyboardBtn = target === arrowToggle || target.closest('#arrow-toggle') || target.id === 'keyboard-toggle-btn' || target.id === 'btn-keyboard-float';
+  
+  if (!isKeyboardArea && !isArrowOrKeyboardBtn) {
+    // Luôn delay 150ms — nếu 2 ngón chạm trong khoảng này thì không ẩn
+    clearTimeout(_hideKeyboardTimer);
+    _hideKeyboardTimer = setTimeout(() => {
+      _hideKeyboardTimer = null;
+      if (_blockRemote || twoFingerActive) return;
+      _doHideKeyboard();
+    }, 150);
+  } else {
+    clearTimeout(_hideKeyboardTimer);
+    _hideKeyboardTimer = null;
+  }
+});
+
+// Mouse move near bottom edge → show UI
+document.addEventListener('mousemove', (e) => { if (e.clientY > window.innerHeight * 0.85) showUI(); });
+
+// Touch start near bottom edge → show UI (mobile)
+// KHÔNG show khi 2 ngón đang active (tránh keyboard hiện lên giữa gesture)
+document.addEventListener('touchstart', (e) => {
+  if (_blockRemote || twoFingerActive) return;
+  const touch = e.touches[0];
+  if (touch.clientY > window.innerHeight * 0.85) showUI();
+}, { passive: true });
+
+statusBar.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+statusBar.addEventListener('mouseleave', () => { hideTimer = setTimeout(hideUI, 1500); });
+arrowToggle.addEventListener('click', () => {
+  const isOpen = controlPanel.classList.toggle('show');
+  arrowToggle.classList.toggle('open', isOpen);
+  clearTimeout(hideTimer);
+  if (!isOpen) hideTimer = setTimeout(hideUI, AUTO_HIDE_DELAY);
+});
+controlPanel.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+controlPanel.addEventListener('mouseleave', () => { hideTimer = setTimeout(hideUI, 1500); });
+showUI();
+
+// ── Reset touch/zoom state khi quay lại app (fix zoom stuck sau switch app) ──
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    twoFingerActive = false;
+    _blockRemote = false;
+    scrollMode = false;
+    _scrollAccum = 0;
+    if (_scrollExitTimer) { clearTimeout(_scrollExitTimer); _scrollExitTimer = null; }
+    twoFingerLastDist = null;
+    twoFingerLastMid = null;
+    touchStartPos = null;
+    touchLastY = null;
+    oneFingerDrag = false;
+    clearLongPress();
+    // Resume audio context khi quay lại tab (fix audio bị tắt do browser suspend)
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    // Reset decoder khi tab visible lại sau sleep để giải phóng decoder cũ
+    console.log('[VISIBILITY] Tab visible, resetting decoder');
+    cleanupDecoder();
+    decoderConfigured = false;
+    decoderReady = false;
+    tsUs = 0;
+    decodedCount = 0;
+    decodeCount = 0;
+    if (typeof _nalSlotCount !== 'undefined') _nalSlotCount = 0;
+    if (typeof _avccOut !== 'undefined') _avccOut = new Uint8Array(0);
+    _lastRenderTs = 0;
+    // Tạo decoder mới ngay (nếu đã có thông tin màn hình từ lần init trước)
+    if (screenInfo && screenInfo.width && screenInfo.height) {
+      initDecoder(screenInfo.width, screenInfo.height);
+      if (cachedSPS && cachedPPS && decoderMode === 'webcodecs') {
+        configureDecoder(cachedSPS, cachedPPS, screenInfo.width, screenInfo.height);
+      }
+    }
+    // Xin keyframe ngay lập tức (force=true bypass throttle) để refresh video sau khi ẩn
+    requestRemoteKeyframe(true);
+  }
+});
+window.addEventListener('focus', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    requestRemoteKeyframe(true);
+  }
+});
+window.addEventListener('pageshow', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    requestRemoteKeyframe(true);
+  }
+});
+window.addEventListener('blur', () => {
+  twoFingerActive = false;
+  _blockRemote = false;
+  scrollMode = false;
+  _scrollAccum = 0;
+  if (_scrollExitTimer) { clearTimeout(_scrollExitTimer); _scrollExitTimer = null; }
+  twoFingerLastDist = null;
+  twoFingerLastMid = null;
+  touchStartPos = null;
+  touchLastY = null;
+  oneFingerDrag = false;
+  clearLongPress();
+});
+
+// ── WebSocket ─────────────────────────────────────────────────
+let ws = null;
+let audioWs = null;
+let lastDataTime = Date.now();   // thời điểm nhận dữ liệu cuối (phát hiện WS chết thầm)
+let _wsClosing = false;          // đang trong quá trình đóng WS cũ
+let _connectTimer = null;        // timer reconnect duy nhất, tránh race condition
+
+// Smart reconnect: exponential backoff + tạm dừng khi tab ẩn
+let _reconnectAttempt = 0;       // số lần thử lại liên tiếp
+const RECONNECT_BASE_MS = 1000;  // bắt đầu 1s
+const RECONNECT_MAX_MS = 30000;  // tối đa 30s
+const RECONNECT_BACKOFF = 2;     // nhân đôi mỗi lần
+
+// Xin keyframe từ server (để tự phục hồi khi bị sọc do rớt frame / mất tham chiếu)
+let _lastKfReq = 0;
+function requestRemoteKeyframe(force = false) {
+  const now = Date.now();
+  if (!force && now - _lastKfReq < 1000) return;   // throttle 1s tránh spam
+  _lastKfReq = now;
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'request_keyframe' }));
+}
+
+function sendDebug(evt, extra) {
+  try {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(Object.assign({ type: 'debug_state', evt: evt }, extra || {})));
+  } catch(e) {}
+  try { console.log('[DBG]', evt, extra || ''); } catch(e) {}
+}
+
+const WS_SCHEME = window.location.protocol === 'https:' ? 'wss' : 'ws';
+
+function getServerUrl() {
+  return localStorage.getItem('server_url_h264wss') || `${WS_SCHEME}://${window.location.hostname}:8766`;
+}
+
+function getAudioUrl() {
+  const base = localStorage.getItem('server_url_h264wss') || `${WS_SCHEME}://${window.location.hostname}:8766`;
+  return base.replace(/:(\d+)$/, ':8767');
+}
+
+function setStatus(state, text) {
+  statusDot.className = 'status-dot ' + state;
+  statusText.textContent = text;
+}
+
+// Reconnect an toàn: đảm bảo chỉ 1 timer chạy, WS cũ đóng hẳn trước khi tạo mới
+function scheduleReconnect(delayMs) {
+  if (_connectTimer) { clearTimeout(_connectTimer); _connectTimer = null; }
+  // Không tự reconnect khi tab bị ẩn (tiết kiệm tài nguyên, tránh nối/ngắt liên tục)
+  if (document.hidden) return;
+  const delay = (delayMs != null) ? delayMs : Math.min(RECONNECT_BASE_MS * Math.pow(RECONNECT_BACKOFF, _reconnectAttempt), RECONNECT_MAX_MS);
+  _connectTimer = setTimeout(() => { _connectTimer = null; connect(); }, delay);
+}
+
+function connectAudio() {
+  initAudio(); // Initialize AudioContext on user gesture
+  // Không đóng audio WS đang khỏe — chỉ tạo mới khi cũ đã đóng/missing
+  if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+    return;
+  }
+  if (audioWs && audioWs.readyState <= 1) audioWs.close();
+  audioWs = new WebSocket(getAudioUrl());
+  audioWs.binaryType = 'arraybuffer';
+  audioWs.onopen = () => console.log('[AUDIO-WS] Connected to', getAudioUrl());
+  audioWs.onmessage = (evt) => {
+    if (evt.data instanceof ArrayBuffer) {
+      const data = new Uint8Array(evt.data);
+      if (data[0] === 0x02) {
+
+        playPCMChunk(data.slice(1));
+      }
+    }
+  };
+  // Reconnect audio nhanh (5s) — tránh mất âm thanh kéo dài khi WS audio rớt
+  audioWs.onclose = (e) => { console.log('[AUDIO-WS] Closed:', e.code, e.reason); setTimeout(() => { if (!document.hidden && !(audioWs && audioWs.readyState === WebSocket.OPEN)) connectAudio(); }, 5000); };
+  audioWs.onerror = (e) => console.error('[AUDIO-WS] Error:', e, e.type);
+}
+
+let broadwayReady = false;
+let broadwayBuffer = [];
+
+let _wsCloseRescue = null;         // timeout cứu hộ nếu onclose không bao giờ fire
+
+function connect() {
+  console.log('[CONNECT] connect() called, ws=', ws ? ws.readyState : 'null', 'wsClosing=', _wsClosing);
+  // Đợi WS cũ đóng hẳn trước khi tạo mới (tránh handshake fail do race condition)
+  if (ws && ws.readyState <= 2) {  // CONNECTING(0), OPEN(1), CLOSING(2)
+    if (_wsClosing) return;        // đang đóng, đợi onclose gọi connect
+    _wsClosing = true;
+    const oldWs = ws;
+    ws = null;
+    oldWs.onclose = () => {
+      if (_wsCloseRescue) { clearTimeout(_wsCloseRescue); _wsCloseRescue = null; }
+      _wsClosing = false;
+      connect();
+    };
+    oldWs.close();
+    // CỨU HỘ: nếu onclose không bao giờ fire (socket chết lặng khi tab ẩn lâu),
+    // tự reset sau 3s để không kẹt _wsClosing=true mãi → màn hình đen không hồi phục.
+    _wsCloseRescue = setTimeout(() => {
+      _wsCloseRescue = null;
+      if (_wsClosing) {
+        _wsClosing = false;
+        console.warn('[WS] onclose không fire, ép reconnect (rescue)');
+        connect();
+      }
+    }, 3000);
+    return;
+  }
+  _wsClosing = false;
+  if (_connectTimer) { clearTimeout(_connectTimer); _connectTimer = null; }
+  serverUrl = getServerUrl();
+  setStatus('connecting', 'Connecting...');
+  ws = new WebSocket(serverUrl);
+  console.log('[CONNECT] WebSocket created, readyState:', ws.readyState, 'URL:', serverUrl);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    console.log('[WS] onopen fired');
+    _reconnectAttempt = 0;   // nối thành công → reset backoff
+    sendDebug('open');
+    setStatus('connected', 'Connected');
+    // === NEW [2026-08-09 Fix Refresh]: reset toàn bộ decoder state trước khi nhận init ===
+    cleanupDecoder();
+    decoderConfigured = false;
+    decoderReady = false;
+    cachedSPS = null;
+    cachedPPS = null;
+    tsUs = 0;
+    decodedCount = 0;
+    decodeCount = 0;
+    _nalSlotCount = 0;
+    _avccOut = new Uint8Array(0);
+    _lastRenderTs = 0;
+    _wsConnectTs = Date.now();  // [2026-08-12] mốc watchdog khi chưa render frame đầu
+    connectAudio();
+    showUI();
+    // Request keyframe on connect
+    requestKeyframe();
+  };
+
+  let lastScreenWidth = 0;
+  let lastScreenHeight = 0;
+
+  function requestKeyframe() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'request_keyframe' }));
+    }
+  }
+
+  ws.onmessage = (evt) => {
+    lastDataTime = Date.now();   // có bất kỳ dữ liệu nào (video/pong/json) → còn sống
+    if (evt.data instanceof ArrayBuffer) {
+      const data = new Uint8Array(evt.data);
+      const type = data[0];
+      const payload = data.slice(1);
+      // [DEBUG lockfix] log mọi binary type nhận được
+      if (typeof _dbgType === 'undefined') _dbgType = 0;
+      _dbgType++;
+      if (_dbgType <= 30) console.log('[DBG-WS] binary type=' + type + ' len=' + payload.length + ' decoderMode=' + decoderMode + ' vd=' + (videoDecoder ? 'yes' : 'null') + ' cfg=' + decoderConfigured + ' rdy=' + decoderReady);
+      
+      if (type === 0x03) {
+        // SPS/PPS header packet từ server
+        const nalsObj = parseAnnexBNALs(payload);
+        const slots = nalsObj.slots;
+        const nalsN = nalsObj.count;
+        for (let i = 0; i < nalsN; i++) {
+          const nal = slots[i];
+          if (nal.type === 7) { cachedSPS = payload.slice(nal.start + nal.scLen, nal.end); }
+          if (nal.type === 8) { cachedPPS = payload.slice(nal.start + nal.scLen, nal.end); }
+        }
+        if (decoderMode === 'webcodecs' && !decoderConfigured && !_isConfiguring && cachedSPS && cachedPPS) {
+          configureDecoder(cachedSPS, cachedPPS, screenInfo.width, screenInfo.height);
+        }
+        return;
+      }
+      
+      if (type === 0x01) {
+        decodeCount++;
+        // console.log('[WS] Video frame:', payload.length, 'bytes, decoderMode:', decoderMode); // TODO: bật lại khi debug video
+        if (!decoderMode) {
+          return;
+        }
+        const nalsObj = parseAnnexBNALs(payload);
+        const slots = nalsObj.slots;
+        const nalsN = nalsObj.count;
+        let hasSPS = false, hasPPS = false, hasIDR = false;
+        for (let i = 0; i < nalsN; i++) {
+          const nal = slots[i];
+          if (nal.type === 7) { cachedSPS = payload.slice(nal.start + nal.scLen, nal.end); hasSPS = true; }
+          if (nal.type === 8) { cachedPPS = payload.slice(nal.start + nal.scLen, nal.end); hasPPS = true; }
+          if (nal.type === 5) hasIDR = true;
+        }
+        if (decoderMode === 'webcodecs') {
+          if (!decoderConfigured && !_isConfiguring && cachedSPS && cachedPPS) {
+            if (hasIDR) _pendingKeyframe = payload;
+            configureDecoder(cachedSPS, cachedPPS, screenInfo.width, screenInfo.height);
+            return;
+          }
+          if (_isConfiguring) {
+            if (hasIDR) _pendingKeyframe = payload;
+            return;
+          }
+        } else if (decoderMode === 'broadway') {
+          if (!broadwayReady) {
+            if (hasSPS && hasPPS && hasIDR) {
+              broadwayReady = true;
+              broadwayBuffer = [];
+            } else {
+              broadwayBuffer.push(payload);
+              if (broadwayBuffer.length > 30) broadwayBuffer.shift();
+              return;
+            }
+          }
+        }
+        decodeFrame(payload);
+      }
+      return;
+    }
+
+    try {
+      const msg = JSON.parse(evt.data);
+      console.log('[DBG-WS] JSON type=' + msg.type);
+      if (msg.type === 'init') {
+        screenInfo = { width: msg.width, height: msg.height, scale: 100 };
+        if (msg.fps) frameIntervalUs = 1000000 / msg.fps;
+        decoderConfigured = false;
+        if (msg.audio_sample_rate) AUDIO_SRC_RATE = msg.audio_sample_rate;
+        const ok = initDecoder(msg.width, msg.height);
+        sendDebug('init_result', { ok: !!ok, mode: decoderMode, webcodecs: 'VideoDecoder' in window });
+        if (!ok) return;
+        setStatus('connected', `Connected (${msg.width}x${msg.height} ${decoderMode})`);
+        codecBadge.textContent = decoderMode === 'webcodecs' ? 'H.264 WebCodecs + PCM' : 'H.264 Broadway + PCM';
+        codecBadge.classList.add('visible');
+        lastScreenWidth = msg.width;
+        lastScreenHeight = msg.height;
+      } else if (msg.type === 'screen_info') {
+        // Screen resolution changed - request new keyframe
+        if (msg.width !== lastScreenWidth || msg.height !== lastScreenHeight) {
+          lastScreenWidth = msg.width;
+          lastScreenHeight = msg.height;
+          requestKeyframe();
+        }
+        screenInfo = msg;
+      } else if (msg.type === 'display_list') {
+        const sel = document.getElementById('sel-display');
+        if (sel && msg.displays) {
+          sel.innerHTML = '';
+          msg.displays.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.id;
+            opt.textContent = d.name + (d.is_current ? ' [Đang phát]' : '');
+            opt.style.background = '#222';
+            opt.style.color = '#fff';
+            if (d.is_current) opt.selected = true;
+            sel.appendChild(opt);
+          });
+        }
+      }
+    } catch (e) {}
+  };
+
+  ws.onclose = (evt) => {
+    console.log('[WS] onclose fired, code:', (evt && evt.code), 'reason:', (evt && evt.reason));
+    _reconnectAttempt++;   // tăng backoff cho lần thử sau
+    sendDebug('ws_close', { code: (evt && evt.code) || '', reason: (evt && evt.reason) || '' });
+    setStatus('disconnected', 'Disconnected - Reconnecting...');
+    codecBadge.classList.remove('visible');
+    showUI();
+    // Thả hết modifier đang giữ khi mất kết nối (tránh kẹt phím ở server)
+    if (armedMods.size > 0) resetCombo();
+    // GIỮ canvas frame cuối (không xóa decoder) → màn hình không đen khi mất kết nối
+    // Nếu _wsClosing=true, connect() sẽ được gọi từ hàm đóng cũ
+    if (!_wsClosing) scheduleReconnect();
+    // Nếu tab đang ẩn: reset backoff (đã return sớm trong scheduleReconnect) để khi quay lại
+    // visibilitychange sẽ nối lại ngay với delay thấp nhất.
+    if (document.hidden) _reconnectAttempt = 0;
+  };
+  ws.onerror = () => { console.error('[WS] onerror fired'); setStatus('disconnected', 'Error'); };
+}
+
+setInterval(() => {
+  const elapsed = (Date.now() - lastFpsTime) / 1000;
+  fpsCounter.textContent = Math.round(decodedCount / elapsed) + ' FPS';
+  decodedCount = 0;
+  lastFpsTime = Date.now();
+}, 1000);
+
+// === NEW [2026-08-09 Fix Refresh] + [2026-08-12 Force Refresh]: watchdog frame stall ===
+setInterval(() => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  // [2026-08-12 Fix] KHÔNG gate bởi decoderReady/_lastRenderTs: nếu client kết nối nhưng
+  // chưa nhận được keyframe đầu (decoder chưa ready) thì watchdog vẫn phải chạy để tự phục hồi
+  // (request keyframe rồi force-reconnect). Trước đây nếu decoderReady=false thì watchdog bỏ qua
+  // → client đen vĩnh viễn khi không bao giờ nhận được I-frame đầu.
+  const anchor = (_lastRenderTs === 0) ? _wsConnectTs : _lastRenderTs;
+  const since = Date.now() - anchor;
+  if (since > STALL_TIMEOUT_MS) {
+    // 3s: thử xin keyframe để server gửi lại I-frame (tự phục hồi khi sọc do rớt frame)
+    sendDebug('stall_watchdog', { since_ms: since });
+    requestRemoteKeyframe();
+  }
+  // [2026-08-12 Force Refresh] Server có thể đã chết lặng (os._exit sau IDLE): WS không nhận
+  // close frame → onclose không bao giờ fire → keyframe không tác dụng → màn hình kẹt frame cũ.
+  // Sau 8s vẫn không render → ép đóng WS + gọi connect() để ws.onopen reset decoder và nhận init mới.
+  // connect() tự động force-close (oldWs.close()) + _wsCloseRescue 3s cho trường hợp onclose không fire.
+  if (since > STALL_RECONNECT_MS) {
+    console.warn('[STALL] frame stall >', STALL_RECONNECT_MS, 'ms, force-close + reconnect to reset decoder (server may be dead)');
+    sendDebug('stall_force_reconnect', { since_ms: since });
+    connect();
+  }
+}, 1000);
+
+// ── Coordinate mapping ────────────────────────────────────────
+let _cachedRect = null;
+let _cachedRectTime = 0;
+function getCachedRect() {
+  const now = Date.now();
+  // Cache 100ms để tránh gọi getBoundingClientRect quá nhiều
+  if (!_cachedRect || now - _cachedRectTime > 100) {
+    _cachedRect = canvas.getBoundingClientRect();
+    _cachedRectTime = now;
+  }
+  return _cachedRect;
+}
+function toServerCoords(clientX, clientY) {
+  const rect = getCachedRect();
+  const pw = screenInfo.width || canvas.width;
+  const ph = screenInfo.height || canvas.height;
+  const px = ((clientX - rect.left) / rect.width) * pw;
+  const py = ((clientY - rect.top) / rect.height) * ph;
+  const factor = screenInfo.scale / 100;
+  return {
+    px: Math.round(Math.max(0, Math.min(pw, px))),
+    py: Math.round(Math.max(0, Math.min(ph, py))),
+    x: Math.round(Math.max(0, Math.min(pw, px)) / factor),
+    y: Math.round(Math.max(0, Math.min(ph, py)) / factor),
+  };
+}
+function sendMsg(data) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(data));
+}
+
+// ── Throttled mouse move ──────────────────────────────────────
+let lastMoveSent = 0;
+let pendingMove = null;
+const MOVE_INTERVAL = 33;
+function sendMouseMove(px, py, x, y) {
+  remoteCursor = { px, py, x, y, visible: true };
+  const now = Date.now();
+  if (now - lastMoveSent >= MOVE_INTERVAL) {
+    lastMoveSent = now;
+    sendMsg({ type: 'mouse_move', x, y });
+    pendingMove = null;
+  } else {
+    pendingMove = { type: 'mouse_move', x, y };
+  }
+}
+setInterval(() => {
+  if (pendingMove) {
+    lastMoveSent = Date.now();
+    sendMsg(pendingMove);
+    pendingMove = null;
+  }
+}, 16);
+
+let remoteCursor = { px: 960, py: 540, x: 960, y: 540, visible: false };
+
+// ── Touch events ──────────────────────────────────────────────
+let touchStartPos = null;
+let touchStartTime = 0;
+let touchLastY = null;
+let twoFingerActive = false;
+let _blockRemote = false;     // Chặn toàn bộ thao tác khác khi 2 ngón (fix ReferenceError)
+let wasTwoFinger = false;     // Đánh dấu đã dùng 2 ngón trong gesture này → không click
+let twoFingerLastDist = null;
+let twoFingerLastMid = null;
+let twoFingerInitialized = false; // false = chưa có baseline → lần move đầu bỏ qua
+let currentZoom = 1;
+let panX = 0, panY = 0;
+let fitW = 0, fitH = 0;   // kích thước vừa khít màn hình (zoom = 1)
+let userZoomed = false;   // đánh dấu người dùng đã zoom tay, để fitCanvas không reset
+
+const MIN_ZOOM = 0.5;     // cho phép zoom-out tối thiểu 50% (thu nhỏ tới 1/2)
+const MAX_ZOOM = 15.0;
+
+function clampPan() {
+  // Khi zoom = 1 → reset pan về 0
+  if (currentZoom <= 1 && !oneFingerDrag && !twoFingerActive) {
+    panX = 0; panY = 0;
+    currentZoom = 1;
+    return;
+  }
+  const contentW = Math.max(fitW, 1) * currentZoom;
+  const contentH = Math.max(fitH, 1) * currentZoom;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let maxX, maxY;
+  if (currentZoom > 1) {
+    // Zoom in: canvas lớn hơn viewport → drag xem parts khác
+    const overflowX = Math.max(0, contentW - vw);
+    const overflowY = Math.max(0, contentH - vh);
+    const margin = Math.max(200, Math.min(4000, overflowX * 0.5));
+    maxX = overflowX + margin;
+    maxY = overflowY + margin;
+  } else {
+    // Zoom out: canvas nhỏ hơn viewport → drag tự do trong viewport + extra
+    const freeX = vw - contentW;
+    const freeY = vh - contentH;
+    maxX = Math.max(4000, freeX / 2 + 200);
+    maxY = Math.max(4000, freeY / 2 + 200);
+  }
+  panX = Math.max(-maxX, Math.min(maxX, panX));
+  panY = Math.max(-maxY, Math.min(maxY, panY));
+}
+
+function applyZoom() {
+  clampPan();
+  const wrapper = container.querySelector('#video-wrapper');
+  if (wrapper) wrapper.style.transform = `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${currentZoom})`;
+  _cachedRect = null;
+  _cachedRectTime = 0;  // Force immediate refresh để rect mới sau zoom
+}
+
+let longPressTimer = null;
+let longPressFired = false;
+let doubleTapSelecting = false; // true = vừa double-tap, sẵn sàng kéo để bôi đen
+let _mouseHeld = false;          // true = nút chuột trái đang bị giữ (sau double-tap hold) → tap tiếp theo = mouse_up
+let _dtReleaseTimeout = null; // timeout chờ release nhanh sau 2nd tap (double-click completion)
+const DT_RELEASE_MS = 250; // ms: release trong khoảng này → double-click; giữ lâu → timeout
+const SINGLE_TAP_DELAY_MS = 250; // ms: trễ gửi click đơn, chờ xem có tap 2 không (giảm từ 500 để tap nhạy hơn)
+let singleTapTimer = null;       // timer chờ gửi click đơn (hủy nếu có tap 2)
+let pendingTapPos = null;        // vị trí click đơn đang chờ gửi
+let oneFingerDrag = false; // true = drag mode, false = scroll mode
+let scrollStarted = false; // đã di chuột về vị trí finger chưa
+let gestureActive = false; // cử chỉ đã bắt đầu → không gửi mouse_move nữa
+let typingActive = false;  // true khi type-input đang focus → chặn zoom/pan
+let lastTapTime = 0;       // thời gian tap cuối cùng (double-tap detection)
+let scrollMode = false;     // true khi đang trong chế độ scroll → cứ di chuyển là gửi scroll, KHÔNG click
+let _scrollExitTimer = null; // timeout trước khi thoát scroll mode (tránh lỡ tay mất contact)
+let _scrollAccum = 0;       // tích lũy scroll lẻ (tránh round về 0 khi scroll chậm)
+let _twoFingerEnd = 0; // timestamp when 2-finger gesture ended
+let _lastMouseUpTime = 0; // timestamp of last mouse_up to prevent extra click
+const LONG_PRESS_MS = 750;
+const EDGE_THRESHOLD = 0.10; // 10% từ cạnh màn hình → drag mode
+
+function clearLongPress() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  if (_dtReleaseTimeout) { clearTimeout(_dtReleaseTimeout); _dtReleaseTimeout = null; }
+}
+
+function onTouchStart(e) {
+  // 2 ngón: LUÔN xử lý trước, ở mọi nơi (kể cả UI panels) → zoom/pan only
+  // Block toàn bộ thao tác khác (keyboard click, remote commands, stray signals)
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    e.stopPropagation();
+    gestureActive = true;
+    _blockRemote = true;  // Chặn toàn bộ thao tác khác
+    scrollMode = false;
+    clearLongPress();
+    // Hủy click đơn đang chờ — 2 ngón xuống nghĩa là pinch, không phải double-tap
+    if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+    pendingTapPos = null;
+    touchStartPos = null;
+    touchLastY = null;
+    
+    twoFingerActive = true;
+    wasTwoFinger = true;
+    twoFingerInitialized = false;
+    twoFingerLastDist = Math.sqrt(
+      (e.touches[0].clientX - e.touches[1].clientX) ** 2 +
+      (e.touches[0].clientY - e.touches[1].clientY) ** 2
+    );
+    twoFingerLastMid = {
+      x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+    };
+    return;
+  }
+  // Nếu 2 ngón đang active → KHÔNG xử lý 1 ngón (block stray signals)
+  if (_blockRemote || twoFingerActive) return;
+  // Dead zone sau khi 2 ngón kết thúc (tránh gesture lạ bị hiểu nhầm)
+  if (Date.now() - _twoFingerEnd < 300) return;
+  // Bỏ qua touch trên UI panels (keyboard, settings, controls, toolbar)
+  if (e.target.closest('#keyboard-panel, #settings-panel, #control-panel, #bottom-bar, #arrow-toggle, #keyboard-toggle-btn, #btn-keyboard-float, .toolbar-btn, .key-btn, #status-bar')) return;
+  // Reset twoFingerActive khi chỉ còn 1 ngón (fix stuck state)
+  if (e.touches.length === 1) {
+    twoFingerActive = false;
+    twoFingerLastDist = null;
+    twoFingerLastMid = null;
+    // Không reset wasTwoFinger ở đây — chờ touchend reset
+  }
+  if (!controlEnabled) return;
+  if (twoFingerActive) return; // Không xử lý 1-finger khi đang 2-finger
+
+  const t = e.touches[0];
+  if (!canvas) return;
+
+  // 1 ngón: chỉ xử lý khi chạm trong vùng canvas
+  const r = getCachedRect();
+  if (t.clientX < r.left || t.clientX > r.right ||
+      t.clientY < r.top || t.clientY > r.bottom) return;
+
+  // Một ngón luôn vào chế độ scroll (kể cả khi zoom); không drag pan bằng một ngón
+  e.preventDefault();
+touchStartPos = { x: t.clientX, y: t.clientY };
+touchStartTime = Date.now();
+touchLastY = t.clientY;
+longPressFired = false;
+  oneFingerDrag = false;
+  scrollStarted = false;
+  gestureActive = false;
+  // Double-tap detection: tap 2 tới khi click đơn đang chờ (singleTapTimer) → hủy click đơn, thành double-tap
+  // Fallback: xét thời gian <750ms so với tap trước (bỏ khoảng cách vì tay tự nhiên di chuyển)
+  const now = Date.now();
+  if (singleTapTimer) {
+    // Tap 2 trong cửa sổ delay → HỦY click đơn của tap 1, chuyển double-tap
+    clearTimeout(singleTapTimer);
+    singleTapTimer = null;
+    pendingTapPos = null;
+    doubleTapSelecting = true;
+  } else if (now - lastTapTime < 750 && !doubleTapSelecting) {
+    doubleTapSelecting = true;
+  }
+  if (_scrollExitTimer) {
+    clearTimeout(_scrollExitTimer);
+    _scrollExitTimer = null;
+    // scrollMode giữ nguyên (không reset)
+  } else {
+    scrollMode = false;  // Reset scroll mode cho touch mới (không phải tiếp tục scroll)
+    _scrollAccum = 0;
+  }
+
+  // Không sendMouseMove ở touchstart — đợi touchmove để tránh con trỏ di chuyển khi 2 ngón
+
+  if (doubleTapSelecting) {
+    // 2nd tap down: gửi mouse_down (press), KHÔNG double-click yet
+    clearLongPress();
+    const { x: lx, y: ly } = toServerCoords(t.clientX, t.clientY);
+    sendMsg({ type: 'mouse_down', x: lx, y: ly, button: 1 });
+    _mouseHeld = true;  // nút chuột đang giữ (kể cả khi timeout giữ lâu → vẫn giữ)
+    _dtReleaseTimeout = setTimeout(() => {
+      // Timeout: giữ quá lâu → không double-click, chỉ là press
+      _dtReleaseTimeout = null;
+      doubleTapSelecting = false;
+      lastTapTime = 0;
+      // _mouseHeld vẫn true → tap tiếp theo sẽ là mouse_up (nhả nút)
+    }, DT_RELEASE_MS);
+  } else {
+    clearLongPress();
+    const { x: lx, y: ly } = toServerCoords(t.clientX, t.clientY);
+    longPressTimer = setTimeout(() => {
+        longPressFired = true;
+        sendMsg({ type: 'mouse_click', x: lx, y: ly, button: 3 });
+        if (navigator.vibrate) navigator.vibrate(30);
+      }, LONG_PRESS_MS);
+  }
+}
+
+function onTouchMove(e) {
+  // Nếu 2 ngón đang active → LUÔN xử lý zoom/pan, block mọi thứ khác
+  if (_blockRemote || twoFingerActive || e.touches.length === 2) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.touches.length < 2) return; // safety
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+    if (twoFingerLastDist !== null && twoFingerLastMid !== null) {
+      if (!twoFingerInitialized) {
+        twoFingerInitialized = true;
+      } else {
+        // Guard: skip nếu ratio quá xa (tránh zoom đột biến)
+        const distRatio = dist / twoFingerLastDist;
+        if (distRatio > 0.3 && distRatio < 3) {
+          // Pan: kéo theo midpoint
+          const dmx = midX - twoFingerLastMid.x;
+          const dmy = midY - twoFingerLastMid.y;
+          panX += dmx;
+          panY += dmy;
+          const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom * distRatio));
+          panX *= newZoom / currentZoom;
+          panY *= newZoom / currentZoom;
+          currentZoom = newZoom;
+          userZoomed = currentZoom > 1 || userZoomed;
+          applyZoom();
+        }
+      }
+      twoFingerLastDist = dist;
+      twoFingerLastMid = { x: midX, y: midY };
+    }
+    return;
+  }
+  // Chỉ xử lý khi đang có cử chỉ trên vùng video (1 ngón đã bắt đầu).
+  // Nếu không, thoát sớm KHÔNG preventDefault để không chặn scroll UI (bàn phím).
+  if (touchStartPos === null) return;
+  e.preventDefault();
+  if (!controlEnabled) return;
+  const t = e.touches[0];
+
+  // Dùng cached rect thay vì elementFromPoint (triggers layout reflow)
+
+  if (touchStartPos) {
+    const mdx = t.clientX - touchStartPos.x;
+    const mdy = t.clientY - touchStartPos.y;
+    if (Math.sqrt(mdx*mdx + mdy*mdy) > 10) clearLongPress();
+  }
+
+  if (oneFingerDrag) {
+    // (giữ logic cho select-mode drag đã xử lý ở nhánh trên)
+    const dx = t.clientX - touchStartPos.x;
+    const dy = t.clientY - touchStartPos.y;
+    panX += dx;
+    panY += dy;
+    touchStartPos = { x: t.clientX, y: t.clientY };
+    clampPan();
+    applyZoom();
+} else {
+      // Một ngón: scroll mode
+      if (touchStartPos) {
+        const sdx = t.clientX - touchStartPos.x;
+        const sdy = t.clientY - touchStartPos.y;
+        const dist = Math.sqrt(sdx*sdx + sdy*sdy);
+        // Vào scroll mode khi finger di chuyển >5px → KHÔNG gửi click nữa
+        // Nếu đang giữ mousedown (_mouseHeld) → KHÔNG vào scroll, vẫn là kéo (mouse_move)
+         const justEnteredScroll = !scrollMode && !_mouseHeld && dist > 2;
+        if (justEnteredScroll) {
+          scrollMode = true;
+          // Đặt con trỏ chuột về vị trí BẮT ĐẦU đặt tay (touchStartPos) — không theo finger đang di chuyển
+          if (touchStartPos) {
+            const { x, y } = toServerCoords(touchStartPos.x, touchStartPos.y);
+            sendMsg({ type: 'mouse_move', x, y });
+          }
+        }
+        if (!gestureActive) {
+          gestureActive = true;
+          // Không sendMouseMove ở đây — mouse_click đã gọi _emit_move trên server
+        }
+        // LUÔN update touchLastY — kể cả chưa vào scroll mode
+        // (tránh scroll "nhảy" khi scroll chậm: touchLastY vẫn là giá trị từ touchStart)
+        if (touchLastY !== null) {
+          const dy = t.clientY - touchLastY;
+          touchLastY = t.clientY;
+// Chỉ gửi scroll khi đang trong scroll mode
+        if (doubleTapSelecting || _mouseHeld) {
+          // Double-tap giữ / mousedown đang giữ + kéo → mouse_move (kéo bôi đen),
+          // KHÔNG vào scroll. mouse_down đã gửi trước đó.
+          const { x: mx, y: my } = toServerCoords(t.clientX, t.clientY);
+          sendMsg({ type: 'mouse_move', x: mx, y: my });
+        } else if (scrollMode) {
+          // Giảm tốc độ cuộn: 2.25 → 3.375 (chậm hơn 2/3 so với trước, scroll chậm rãi)
+          _scrollAccum += dy / 3.375;
+          const clicks = Math.trunc(_scrollAccum);
+          if (clicks !== 0) {
+            _scrollAccum -= clicks;
+            sendMsg({ type: 'mouse_scroll', dy: clicks });
+          }
+        }
+      }
+    }
+  }
+}
+
+function onTouchEnd(e) {
+  // console.log('[TE] onTouchEnd', e.type, e.changedTouches?.length); // TODO: bật lại khi debug gesture
+  clearLongPress();
+  // touchcancel (ngón tay ra ngoài màn hình thiết bị): chỉ reset, không gửi sự kiện giả
+  if (e.type === 'touchcancel') {
+    // Hủy click đơn đang chờ — touchcancel nghĩa là gesture hỏng, không gửi click muộn
+    if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+    pendingTapPos = null;
+    // Đang giữ chuột → nhả dự phòng (tránh kẹt nút ở server)
+    if (_mouseHeld) {
+      sendMsg({ type: 'mouse_up', x: 0, y: 0, button: 1 });
+      _mouseHeld = false;
+    }
+    doubleTapSelecting = false;
+    twoFingerActive = false;
+    _blockRemote = false;
+    scrollMode = false;
+    _scrollAccum = 0;
+    if (_scrollExitTimer) { clearTimeout(_scrollExitTimer); _scrollExitTimer = null; }
+    twoFingerLastDist = null;
+    twoFingerLastMid = null;
+    twoFingerInitialized = false;
+    oneFingerDrag = false;
+    touchStartPos = null;
+    touchLastY = null;
+    return;
+  }
+  if (twoFingerActive) {
+    if (e.touches.length < 2) {
+      twoFingerActive = false;
+      _blockRemote = false;  // 2 ngón kết thúc → cho phép thao tác khác
+      _twoFingerEnd = Date.now();
+      scrollMode = false;
+      _scrollAccum = 0;
+      twoFingerLastDist = null;
+      twoFingerLastMid = null;
+      twoFingerInitialized = false;
+      touchLastY = null;
+      // Sau pinch, ngón còn lại vẫn ở chế độ scroll (một ngón = scroll)
+      if (e.touches.length === 1) {
+        // KHÔNG inherit touchStartPos từ ngón còn lại — nếu ngón đó ở vùng đen
+        // (ngoài canvas) thì sẽ gửi click/move sai vị trí.
+        // Reset sạch: ngón còn lại phải bắt đầu gesture mới qua onTouchStart
+        // (có kiểm tra bounds canvas).
+        oneFingerDrag = false;
+        touchStartPos = null;
+        touchLastY = null;
+        scrollMode = false;
+        _scrollAccum = 0;
+      } else {
+        // Cả 2 ngón đều lift → reset wasTwoFinger cho gesture tiếp theo
+        wasTwoFinger = false;
+        oneFingerDrag = false;
+        touchStartPos = null;
+      }
+    }
+    return;
+  }
+  // Nếu vẫn còn >=2 ngón (hiếm) → không xử lý 1 ngón
+  if (e.touches.length >= 2) return;
+  if (!controlEnabled) return;
+
+  // Thoát scroll mode khi TẤT CẢ ngón đều lift
+  // Dùng timeout 300ms — nếu ngón chạm lại trước khi timeout → giữ scroll mode
+  // (tránh lỡ tay mất contact rồi bị hiểu thành click khi chạm lại)
+  if (e.touches.length === 0) {
+    // Kết thúc scroll: đưa con trỏ chuột VỀ vị trí bắt đầu đặt tay để scroll
+    // (chuột KHÔNG di chuyển khỏi điểm đặt tay ban đầu khi thao tác là scroll)
+    if (scrollMode && e.changedTouches.length === 1 && touchStartPos) {
+      const { x, y } = toServerCoords(touchStartPos.x, touchStartPos.y);
+      sendMsg({ type: 'mouse_move', x, y });
+    }
+    if (scrollMode && !_scrollExitTimer) {
+      _scrollExitTimer = setTimeout(() => {
+        _scrollExitTimer = null;
+        scrollMode = false;
+        _scrollAccum = 0;
+      }, 300);
+    }
+    if (wasTwoFinger) {
+      wasTwoFinger = false;
+      _blockRemote = false;
+      longPressFired = false;
+      touchStartPos = null;
+    }
+  }
+
+  // Xử lý tap (click)
+  // Chỉ gửi click khi: chạm trên canvas, KHÔNG đang trong scroll mode, không phải 2-finger, và không longPress
+  // Scroll mode: finger đã di chuyển >2px → KHÔNG gửi click nữa (tránh scroll bị out of track)
+  if (touchStartPos && e.changedTouches.length === 1 && !longPressFired && !wasTwoFinger) {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartPos.x;
+    const dy = t.clientY - touchStartPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const elapsed = Date.now() - touchStartTime;
+    const threshold = Math.max(36, 45 * currentZoom); // x3 ngưỡng gốc (12, 15*zoom): cho phép tap lệch vị trí rộng hơn
+    const isTap = !scrollMode && dist < threshold && elapsed < 250;
+
+    if (doubleTapSelecting) {
+      // 2nd tap up — CHỈ nhả khi là TAP SẠCH (isTap). Nếu kéo/giữ lâu → GIỮ mousedown.
+      const { x, y } = toServerCoords(t.clientX, t.clientY);
+      if (isTap) {
+        // Release nhanh → nhả nút + double-click hoàn thành (nếu trong cửa sổ timeout)
+        sendMsg({ type: 'mouse_up', x, y, button: 1 });
+        _mouseHeld = false;  // đã nhả → hết giữ nút
+        if (_dtReleaseTimeout) {
+          // Vẫn trong cửa sổ double-click → gửi click
+          clearTimeout(_dtReleaseTimeout);
+          _dtReleaseTimeout = null;
+          sendMsg({ type: 'mouse_click', x, y, button: 1 });
+          lastTapTime = 0;
+        }
+        // Nếu _dtReleaseTimeout đã hết → chỉ mouse_up, không double-click (timeout press)
+      } else {
+        // Kéo/giữ lâu → KHÔNG nhả mousedown, chỉ bỏ trạng thái double-tap
+        if (_dtReleaseTimeout) { clearTimeout(_dtReleaseTimeout); _dtReleaseTimeout = null; }
+      }
+      doubleTapSelecting = false;
+    } else if (_mouseHeld) {
+      // Đang giữ chuột (double-tap hold đã timeout) → CHỈ nhả khi là TAP SẠCH (isTap).
+      // Nếu là scroll/drag (di chuyển nhiều hoặc giữ lâu) → GIỮ mousedown, không thoát.
+      if (isTap) {
+        // Tap sạch tại vị trí mới = click đơn: mouse_move + mouse_up
+        const { x, y } = toServerCoords(t.clientX, t.clientY);
+        sendMsg({ type: 'mouse_move', x, y });
+        sendMsg({ type: 'mouse_up', x, y, button: 1 });
+        _mouseHeld = false;
+      }
+    } else if (isTap) {
+      // Single tap: KHÔNG gửi ngay — trễ SINGLE_TAP_DELAY_MS chờ xem có tap 2 không.
+      // Nếu có tap 2 → onTouchStart hủy timer này (không gửi click đơn, thành double-tap).
+      const { x, y } = toServerCoords(t.clientX, t.clientY);
+      if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+      pendingTapPos = { x, y };
+      singleTapTimer = setTimeout(() => {
+        singleTapTimer = null;
+        if (pendingTapPos) {
+          sendMsg({ type: 'mouse_click', x: pendingTapPos.x, y: pendingTapPos.y, button: 1 });
+          pendingTapPos = null;
+          lastTapTime = Date.now();
+        }
+      }, SINGLE_TAP_DELAY_MS);
+    }
+  }
+
+  // Cleanup: đảm bảo doubleTapSelecting không bị treo
+  if (doubleTapSelecting) doubleTapSelecting = false;
+  if (_dtReleaseTimeout) { clearTimeout(_dtReleaseTimeout); _dtReleaseTimeout = null; }
+  touchStartPos = null;
+  touchLastY = null;
+  oneFingerDrag = false;
+}
+
+// ── Button handlers ───────────────────────────────────────────
+btnCtrl.addEventListener('click', () => {
+  controlEnabled = !controlEnabled;
+  btnCtrl.textContent = controlEnabled ? 'Control: ON' : 'Control: OFF';
+  btnCtrl.classList.toggle('active', controlEnabled);
+  if (canvas) canvas.style.cursor = controlEnabled ? 'crosshair' : 'default';
+});
+btnFullscreen.addEventListener('click', () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen();
+});
+// btnFocusTarget.addEventListener('click', () => {  // Đã bỏ typing area
+//   focusRemoteTarget();
+//   hiddenInput.focus();
+// });
+btnSettings.addEventListener('click', () => {
+  const show = settingsPanel.classList.toggle('show');
+  document.getElementById('inp-host').value = getServerUrl();
+  clearTimeout(hideTimer);
+  if (show && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'get_displays' }));
+  }
+});
+document.getElementById('btn-refresh-displays').addEventListener('click', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'get_displays' }));
+  }
+});
+document.getElementById('btn-switch-display').addEventListener('click', () => {
+  const sel = document.getElementById('sel-display');
+  if (sel && ws && ws.readyState === WebSocket.OPEN) {
+    const outIdx = parseInt(sel.value, 10);
+    ws.send(JSON.stringify({ type: 'switch_display', output_idx: outIdx }));
+    settingsPanel.classList.remove('show');
+    controlPanel.classList.remove('show');
+    arrowToggle.classList.remove('open');
+    hideTimer = setTimeout(hideUI, AUTO_HIDE_DELAY);
+  }
+});
+document.getElementById('btn-save-settings').addEventListener('click', () => {
+  const url = document.getElementById('inp-host').value.trim();
+  if (url) localStorage.setItem('server_url_h264wss', url);
+  settingsPanel.classList.remove('show');
+  controlPanel.classList.remove('show');
+  arrowToggle.classList.remove('open');
+  hideTimer = setTimeout(hideUI, AUTO_HIDE_DELAY);
+  connect();
+});
+document.getElementById('btn-close-settings').addEventListener('click', () => {
+  settingsPanel.classList.remove('show');
+  controlPanel.classList.remove('show');
+  arrowToggle.classList.remove('open');
+  hideTimer = setTimeout(hideUI, AUTO_HIDE_DELAY);
+});
+let _lastKeyboardClickTime = 0;
+btnKeyboard.addEventListener('click', () => {
+  const now = Date.now();
+  if (now - _lastKeyboardClickTime < 300) return;
+  _lastKeyboardClickTime = now;
+  hiddenInput.focus();
+});
+// Nút toggle bàn phím ảo — chỉ toggle panel, KHÔNG ảnh hưởng phone keyboard
+document.getElementById('keyboard-toggle-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const show = keyboardPanel.classList.toggle('show');
+  document.getElementById('keyboard-toggle-btn').textContent = show ? '▲' : '▼';
+  if (show) {
+    clearTimeout(hideTimer);
+  }
+});
+const MODIFIER_KEYS = ['ctrl', 'alt', 'shift', 'super'];
+const comboDisplay = document.getElementById('combo-display');
+let armedMods = new Set();
+let modifierTimer = null;
+const MODIFIER_TIMEOUT_MS = 7000;   // tự release + reset toggle modifier sau 7s
+
+function armModifierTimer() {
+  if (modifierTimer) clearTimeout(modifierTimer);
+  modifierTimer = setTimeout(() => {
+    modifierTimer = null;
+    resetCombo();   // hết hạn → thả hết modifier đang giữ
+  }, MODIFIER_TIMEOUT_MS);
+}
+
+function updateComboUI() {
+  document.querySelectorAll('.key-btn').forEach(b => {
+    const k = b.dataset.key;
+    b.classList.toggle('armed', armedMods.has(k));
+  });
+  if (armedMods.size > 0) {
+    const txt = [...armedMods].join(' + ');
+    comboDisplay.textContent = `Đang giữ: ${txt}`;
+  } else {
+    comboDisplay.textContent = '';
+  }
+}
+
+function resetCombo() {
+  // Hủy timer tự release nếu có
+  if (modifierTimer) { clearTimeout(modifierTimer); modifierTimer = null; }
+  // Gửi key_up cho mọi modifier đang giữ (tránh kẹt phím ở server)
+  armedMods.forEach(mod => sendMsg({ type: 'key_up', key: mod }));
+  armedMods.clear();
+  updateComboUI();
+}
+
+document.querySelectorAll('.key-btn').forEach(btn => {
+  let repeatTimer = null;
+  const sendKey = () => {
+    const k = btn.dataset.key;
+    if (MODIFIER_KEYS.includes(k)) return;   // modifier xử lý riêng ở pointerdown
+    // Modifier đã giữ ở server → gửi phím trần, tổ hợp tự động hoạt động
+    sendMsg({ type: 'key_press', key: k });
+  };
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const k = btn.dataset.key;
+    // Modifier: toggle on/off — gửi key_down/key_up tới server ngay
+    if (MODIFIER_KEYS.includes(k)) {
+      if (armedMods.has(k)) {
+        // Đang bật → tắt: thả modifier ở server
+        armedMods.delete(k);
+        sendMsg({ type: 'key_up', key: k });
+      } else {
+        // Đang tắt → bật: giữ modifier ở server
+        armedMods.add(k);
+        sendMsg({ type: 'key_down', key: k });
+      }
+      updateComboUI();
+      armModifierTimer();
+      return;
+    }
+    sendKey();
+    if (k !== 'Return') {   // Return không auto-repeat (tránh chạy lệnh nhiều lần)
+      repeatTimer = setInterval(sendKey, 60);   // giữ nút → lặp gửi
+    }
+  });
+  const stopRepeat = () => {
+    if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+    // Modifier: KHÔNG thả khi pointerup (toggle xử lý riêng)
+  };
+  btn.addEventListener('pointerup', stopRepeat);
+  btn.addEventListener('pointerleave', stopRepeat);
+  btn.addEventListener('pointercancel', stopRepeat);
+});
+// ── Hidden input: mobile keyboard nhập trực tiếp → gửi từng ký tự ──
+let _prevInputValue = '';
+let isComposing = false;
+
+hiddenInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (isComposing) return;
+  // Modifier keys từ phím cứng phone → IGNORE
+  if (MODIFIER_KEYS.includes(e.key.toLowerCase())) return;
+  // Enter
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendMsg({ type: 'key_press', key: 'Return' });
+    hiddenInput.value = '';
+    _prevInputValue = '';
+    return;
+  }
+  // BackSpace → preventDefault để input handler không detect deletion
+  if (e.key === 'Backspace') {
+    e.preventDefault();
+    sendMsg({ type: 'key_press', key: 'BackSpace' });
+    return;
+  }
+  // Special keys
+  const SPECIAL_KEYS = {'ArrowUp':'Up','ArrowDown':'Down','ArrowLeft':'Left','ArrowRight':'Right','Tab':'Tab','Delete':'Delete','Escape':'Escape'};
+  if (SPECIAL_KEYS[e.key]) {
+    sendMsg({ type: 'key_press', key: SPECIAL_KEYS[e.key] });
+    return;
+  }
+  // Printable chars → KHÔNG gửi ở đây, để input handler gửi text nguyên văn
+});
+
+hiddenInput.addEventListener('focus', () => {
+  clearTimeout(hideTimer);
+  _prevInputValue = hiddenInput.value;
+  // Ngăn browser tự scroll khi focus input (mobile)
+  window.scrollTo(0, 0);
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
+});
+
+hiddenInput.addEventListener('blur', () => {
+  // Blur → ẩn keyboard panel
+});
+
+// Input event: nhận text từ mobile keyboard → gửi nguyên văn lên server
+hiddenInput.addEventListener('input', (e) => {
+  clearTimeout(hideTimer);
+  if (isComposing) return;
+  const current = hiddenInput.value;
+  const prev = _prevInputValue;
+  if (current.length > prev.length) {
+    const added = current.slice(prev.length);
+    if (armedMods.size > 0 && added.length === 1) {
+      // Modifier đang giữ ở server → gửi phím trần, server tự kèm modifier qua _send_key_with_modifiers
+      sendMsg({ type: 'key_press', key: added });
+    } else {
+      sendMsg({ type: 'key_type', text: added });
+    }
+  } else if (current.length < prev.length) {
+    const count = prev.length - current.length;
+    for (let i = 0; i < count; i++) {
+      sendMsg({ type: 'key_press', key: 'BackSpace' });
+    }
+  }
+  hiddenInput.value = '';
+  _prevInputValue = '';
+  setTimeout(() => hiddenInput.focus(), 0);
+});
+
+// Composition handlers ( Vietnamese Telex trên mobile )
+hiddenInput.addEventListener('compositionstart', () => { isComposing = true; });
+hiddenInput.addEventListener('compositionend', (e) => {
+  isComposing = false;
+  // KHÔNG dispatch synthetic input event — browser sẽ tự fire input event sau compositionend
+});
+// let isComposing = false;  // Đã khai báo ở trên
+
+function focusRemoteTarget() {
+  // Click vào vị trí con trỏ cuối để focus ô nhập trên máy remote
+  // (xdotool type chỉ gõ vào cửa sổ đang có focus)
+  sendMsg({ type: 'mouse_click', x: remoteCursor.x, y: remoteCursor.y, button: 1 });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!controlEnabled) return;
+  if (e.target === hiddenInput) return;
+  e.preventDefault();
+  let key = e.key;
+  if (key === ' ') key = 'space';
+  else if (key === 'ArrowUp') key = 'Up';
+  else if (key === 'ArrowDown') key = 'Down';
+  else if (key === 'ArrowLeft') key = 'Left';
+  else if (key === 'ArrowRight') key = 'Right';
+  else if (key === 'Escape') key = 'Escape';
+  else if (key === 'Enter') key = 'Return';
+  else if (key === 'Backspace') key = 'BackSpace';
+  else if (key === 'Delete') key = 'Delete';
+  else if (key === 'Tab') key = 'Tab';
+  if (e.ctrlKey && key !== 'ctrl') key = 'ctrl+' + key;
+  else if (e.altKey && key !== 'alt') key = 'alt+' + key;
+  else if (e.shiftKey && key !== 'shift') key = 'shift+' + key;
+  else if (e.metaKey && key !== 'super') key = 'super+' + key;
+  sendMsg({ type: 'key_press', key });
+});
+
+// ── Heartbeat + Watchdog chống WS "chết thầm" khi tắt màn hình ──
+const IDLE_RECONNECT_MS = 180000;   // 3 phút: không có dữ liệu → reconnect
+// 1) Heartbeat: gửi ping định kỳ (server echo pong) để giữ kết nối "có hoạt động"
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+}, 15000);
+// 2) Watchdog: nếu đã OPEN nhưng >3 phút không nhận gì → ép đóng để onclose reconnect
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN && Date.now() - lastDataTime > IDLE_RECONNECT_MS) {
+    console.log('[WS] Idle >3min, force reconnect');
+    ws.close();  // onclose sẽ gọi connect()
+  }
+}, 10000);
+// 3) Khi bật lại màn hình: ping nhanh, nếu 5s không có pong/data → reconnect ngay
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  _reconnectAttempt = 0;   // reset backoff để nối lại nhanh nhất
+  // Reset toàn bộ gesture state — khi khóa màn hình/chuyển app giữa lúc pinch 2 ngón,
+  // touchend/touchcancel KHÔNG fire → twoFingerActive/_blockRemote kẹt true → chặn hết touch
+  twoFingerActive = false;
+  wasTwoFinger = false;
+  _blockRemote = false;
+  gestureActive = false;
+  scrollMode = false;
+  _scrollAccum = 0;
+  doubleTapSelecting = false;
+  oneFingerDrag = false;
+  scrollStarted = false;
+  longPressFired = false;
+  touchStartPos = null;
+  touchLastY = null;
+  twoFingerLastDist = null;
+  twoFingerLastMid = null;
+  twoFingerInitialized = false;
+  if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  if (_scrollExitTimer) { clearTimeout(_scrollExitTimer); _scrollExitTimer = null; }
+  if (_dtReleaseTimeout) { clearTimeout(_dtReleaseTimeout); _dtReleaseTimeout = null; }
+  pendingTapPos = null;
+  // Đang giữ nút chuột → nhả dự phòng (tránh kẹt nút ở server)
+  if (_mouseHeld) {
+    sendMsg({ type: 'mouse_up', x: 0, y: 0, button: 1 });
+    _mouseHeld = false;
+  }
+  // Resume audio nếu bị suspend do tab ẩn (tránh mất âm thanh khi quay lại)
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+  // Audio WS cũng có thể chết khi tab ẩn → nối lại audio nếu chưa sẵn sàng
+  if (!audioWs || audioWs.readyState > 1) {
+    if (document.hidden === false) connectAudio();
+  }
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'ping' }));
+    const t = Date.now();
+    setTimeout(() => {
+      if (ws && ws.readyState === WebSocket.OPEN && t - lastDataTime > 5000) {
+        console.log('[WS] Visible but stale, force reconnect');
+        ws.close();  // onclose sẽ gọi scheduleReconnect
+      }
+    }, 5000);
+  } else if (!_wsClosing) {
+    // WS đã đóng/failed — reconnect ngay
+    if (_connectTimer) { clearTimeout(_connectTimer); _connectTimer = null; }
+    scheduleReconnect(500);
+  } else {
+    // _wsClosing kẹt (onclose chưa fire) — ép reset để không rơi vào đen mãi
+    _wsClosing = false;
+    if (_wsCloseRescue) { clearTimeout(_wsCloseRescue); _wsCloseRescue = null; }
+    scheduleReconnect(500);
+  }
+});
+
+console.log('[INIT] About to call connect()');
+connect();
+</script>
+</body>
+</html>
