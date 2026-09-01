@@ -19,7 +19,7 @@ Remote desktop viewer using H264 encoding + WebSocket transport, viewable direct
 ### Install Dependencies
 
 ```bash
-pip install websockets aiortc av numpy pillow
+pip install websockets av dxcam numpy opencv-python
 ```
 
 ### Generate SSL Certificate
@@ -52,15 +52,15 @@ Cai_Dat_Man_Hinh_Ao.bat
 ### Prerequisites
 
 ```bash
-pip install pyinstaller websockets aiortc av numpy pillow
+pip install pyinstaller websockets av dxcam numpy opencv-python
 ```
 
 ### Build All
 
 ```bash
-# Build P_new server
+# Build P_new server (bundle web viewer)
 cd release/server
-pyinstaller --onefile server_H264wss_testP_new.py
+pyinstaller --onefile --add-data "../../web;web" server_H264wss_testP_new.py
 
 # Build P_new manager
 cd ../../server
@@ -69,10 +69,10 @@ pyinstaller --onefile --name server_manager_P_new server_manager.py
 
 ### Output
 
-- `release/server/dist/server_H264wss_testP_new.exe` - Main server
-- `server/dist/server_manager_P_new.exe` - Process manager
+- `release/server/dist/server_H264wss_testP_new.exe` - Main server (~95MB, includes web)
+- `server/dist/server_manager_P_new.exe` - Process manager (~9MB)
 
-Copy both exe to same folder, run `server_manager_P_new.exe` to start.
+Copy both exe + `cert.pem`/`key.pem` to same folder, run `server_manager_P_new.exe` to start. If `--add-data` omitted, copy `web/` folder next to exe instead.
 
 ## Project Structure
 
