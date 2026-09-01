@@ -67,9 +67,12 @@ pip install pyinstaller websockets av dxcam numpy opencv-python
 ### Build All
 
 ```bash
-# Build P_new server (bundle web viewer)
+# Generate cert in release/server (so it can be bundled)
 cd release/server
-pyinstaller --onefile --add-data "../../web;web" server_H264wss_testP_new.py
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+
+# Build P_new server (bundle web viewer + cert)
+pyinstaller --onefile --add-data "../../web;web" --add-data "cert.pem;." --add-data "key.pem;." server_H264wss_testP_new.py
 
 # Build P_new manager
 cd ../../server
@@ -78,10 +81,10 @@ pyinstaller --onefile --name server_manager_P_new server_manager.py
 
 ### Output
 
-- `release/server/dist/server_H264wss_testP_new.exe` - Main server (~95MB, includes web)
+- `release/server/dist/server_H264wss_testP_new.exe` - Main server (~95MB, includes web + cert)
 - `server/dist/server_manager_P_new.exe` - Process manager (~9MB)
 
-Copy both exe + `cert.pem`/`key.pem` to same folder, run `server_manager_P_new.exe` to start. If `--add-data` omitted, copy `web/` folder next to exe instead.
+Copy both exe to same folder, run `server_manager_P_new.exe` to start. Mock tested at `C:\Temp\mock_Xemmanhinh\dist_test` → `94.5 MB` and `[FPS]` log OK.
 
 ## Project Structure
 
