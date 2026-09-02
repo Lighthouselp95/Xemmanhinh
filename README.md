@@ -12,7 +12,7 @@ Remote desktop viewer using H264 encoding + WebSocket transport, viewable direct
 ## Quick Start
 
 1. Run `server_manager_P_new.exe`
-2. Open browser: `http://localhost:8765`
+2. Open browser: `https://localhost:8765`
 
 ## Run from Source
 
@@ -44,7 +44,7 @@ openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -node
 python server/server_manager.py
 ```
 
-Open `http://localhost:8765` in browser.
+Open `https://localhost:8765` in browser.
 
 ### Virtual Display (Optional)
 
@@ -85,6 +85,8 @@ pyinstaller --onefile --name server_manager_P_new server_manager.py
 - `server/dist/server_manager_P_new.exe` - Process manager (~9MB)
 
 Copy both exe to same folder, run `server_manager_P_new.exe` (Admin) to start. Mock tested at `C:\Temp\mock_Xemmanhinh\dist_test` → `90.55 MB` and `[FPS]` log OK, audio WASAPI loopback works on all machines.
+
+> **Note:** Server chạy bằng **HTTPS** (`https://localhost:8765`), không phải HTTP — SSL cert nằm trong `release/server/cert.pem` + `key.pem`, tự bundle vào exe khi build hoặc tuỳ biến trong `release/server/server_H264wss_testP_new.py` (HTTP_PORT / SSL).
 
 ## Project Structure
 
